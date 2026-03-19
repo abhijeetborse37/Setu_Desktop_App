@@ -1,0 +1,8 @@
+
+{
+  "name": "Setu ERP & Business Suite",
+  "description": "A comprehensive, cloud-based ERP solution for managing multiple companies, products, customers, and financial analytics with a highly customizable interface.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
