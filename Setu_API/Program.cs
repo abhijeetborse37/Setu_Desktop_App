@@ -8,7 +8,7 @@ using Microsoft.OpenApi.Models;
 using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
-AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
+//AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
 
 var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
 builder.WebHost.UseUrls($"http://*:{port}");
@@ -67,25 +67,37 @@ builder.Services.AddSwaggerGen(c =>
 });
 
 // DbContext setup with resilient connection handling for Railway Postgres
+// builder.Services.AddDbContext<ApplicationDbContext>(options =>
+//     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"),
+//         npgsqlOptionsAction: sqlOptions =>
+//         {
+//             sqlOptions.EnableRetryOnFailure(
+//                 maxRetryCount: 10,
+//                 maxRetryDelay: TimeSpan.FromSeconds(30),
+//                 errorCodesToAdd: null);
+//         }));
+
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"),
-        npgsqlOptionsAction: sqlOptions =>
-        {
-            sqlOptions.EnableRetryOnFailure(
-                maxRetryCount: 10,
-                maxRetryDelay: TimeSpan.FromSeconds(30),
-                errorCodesToAdd: null);
-        }));
+{
+    var dbPath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+        "Setu",
+        "setu.db"
+    );
+    Directory.CreateDirectory(Path.GetDirectoryName(dbPath)!);
+
+    options.UseSqlite($"Data Source={dbPath}");
+});
 
 //Added Redis Connection Multiplexer
-var redisConnection = builder.Configuration["REDIS_CONNECTION"];
-if (!string.IsNullOrEmpty(redisConnection))
-{
-    builder.Services.AddSingleton<IConnectionMultiplexer>(
-        ConnectionMultiplexer.Connect(redisConnection)
-    );
-    builder.Services.AddScoped<RedisService>();
-}
+// var redisConnection = builder.Configuration["REDIS_CONNECTION"];
+// if (!string.IsNullOrEmpty(redisConnection))
+// {
+//     builder.Services.AddSingleton<IConnectionMultiplexer>(
+//         ConnectionMultiplexer.Connect(redisConnection)
+//     );
+//     builder.Services.AddScoped<RedisService>();
+// }
 
 // Add response caching for performance
 builder.Services.AddResponseCaching(options =>
@@ -146,7 +158,8 @@ using (var scope = app.Services.CreateScope())
 
     try
     {
-        db.Database.Migrate(); // Ensure migrations are applied
+        //db.Database.Migrate(); // Ensure migrations are applied
+        db.Database.EnsureCreated();
 
         var hasAdmin = db.Users.Any(u => u.Role == Setu.Api.Models.UserRole.Admin);
         if (!hasAdmin)
@@ -184,15 +197,15 @@ using (var scope = app.Services.CreateScope())
 // ===== END SEEDING =====
 
 // Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI(c =>
-    {
-        c.SwaggerEndpoint("/swagger/v1/swagger.json", "Setu API v1");
-        c.RoutePrefix = "swagger"; // Available at http://localhost:PORT/swagger
-    });
-}
+// if (app.Environment.IsDevelopment())
+// {
+//     app.UseSwagger();
+//     app.UseSwaggerUI(c =>
+//     {
+//         c.SwaggerEndpoint("/swagger/v1/swagger.json", "Setu API v1");
+//         c.RoutePrefix = "swagger"; // Available at http://localhost:PORT/swagger
+//     });
+// }
 
 app.UseSwagger();
 app.UseSwaggerUI(c =>
@@ -254,48 +267,48 @@ app.Run();
 
 // ===== KEEP-ALIVE BACKGROUND SERVICE =====
 // Prevents Render free tier from putting the server to sleep
-public class KeepAliveService : BackgroundService
-{
-    private readonly ILogger<KeepAliveService> _logger;
-    private readonly IConfiguration _configuration;
+// public class KeepAliveService : BackgroundService
+// {
+//     private readonly ILogger<KeepAliveService> _logger;
+//     private readonly IConfiguration _configuration;
 
-    public KeepAliveService(ILogger<KeepAliveService> logger, IConfiguration configuration)
-    {
-        _logger = logger;
-        _configuration = configuration;
-    }
+//     public KeepAliveService(ILogger<KeepAliveService> logger, IConfiguration configuration)
+//     {
+//         _logger = logger;
+//         _configuration = configuration;
+//     }
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-    {
-        var selfUrl = _configuration["RENDER_EXTERNAL_URL"] 
-                      ?? _configuration["SELF_URL"] 
-                      ?? null;
+//     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+//     {
+//         var selfUrl = _configuration["RENDER_EXTERNAL_URL"] 
+//                       ?? _configuration["SELF_URL"] 
+//                       ?? null;
 
-        if (string.IsNullOrEmpty(selfUrl))
-        {
-            _logger.LogWarning("KeepAlive: No RENDER_EXTERNAL_URL or SELF_URL configured. Keep-alive disabled.");
-            return;
-        }
+//         if (string.IsNullOrEmpty(selfUrl))
+//         {
+//             _logger.LogWarning("KeepAlive: No RENDER_EXTERNAL_URL or SELF_URL configured. Keep-alive disabled.");
+//             return;
+//         }
 
-        using var httpClient = new HttpClient();
-        httpClient.Timeout = TimeSpan.FromSeconds(30);
+//         using var httpClient = new HttpClient();
+//         httpClient.Timeout = TimeSpan.FromSeconds(30);
 
-        while (!stoppingToken.IsCancellationRequested)
-        {
-            try
-            {
-                await Task.Delay(TimeSpan.FromMinutes(14), stoppingToken);
-                var response = await httpClient.GetAsync($"{selfUrl}/health", stoppingToken);
-                _logger.LogInformation("KeepAlive ping: {StatusCode} at {Time}", response.StatusCode, DateTime.UtcNow);
-            }
-            catch (TaskCanceledException)
-            {
-                // Server is shutting down, ignore
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning("KeepAlive ping failed: {Message}", ex.Message);
-            }
-        }
-    }
-}
+//         while (!stoppingToken.IsCancellationRequested)
+//         {
+//             try
+//             {
+//                 await Task.Delay(TimeSpan.FromMinutes(14), stoppingToken);
+//                 var response = await httpClient.GetAsync($"{selfUrl}/health", stoppingToken);
+//                 _logger.LogInformation("KeepAlive ping: {StatusCode} at {Time}", response.StatusCode, DateTime.UtcNow);
+//             }
+//             catch (TaskCanceledException)
+//             {
+//                 // Server is shutting down, ignore
+//             }
+//             catch (Exception ex)
+//             {
+//                 _logger.LogWarning("KeepAlive ping failed: {Message}", ex.Message);
+//             }
+//         }
+//     }
+// }
