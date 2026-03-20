@@ -10,7 +10,7 @@ using StackExchange.Redis;
 var builder = WebApplication.CreateBuilder(args);
 //AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
 
-var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
+var port = Environment.GetEnvironmentVariable("PORT") ?? "5039";
 builder.WebHost.UseUrls($"http://*:{port}");
 
 // Add services to the container.
@@ -140,7 +140,8 @@ builder.Services.AddCors(options =>
     {
         policy.WithOrigins(
                 "https://setu.abhijitborse3797.workers.dev",
-                "http://localhost:5173"
+                "http://localhost:5173",
+                "http://localhost:3000"
             )
             .AllowAnyHeader()
             .AllowAnyMethod()

@@ -1,0 +1,47 @@
+{
+  "name": "setu_desktop_app",
+  "version": "1.0.0",
+  "description": "Desktop Application",
+  "main": "Electron/main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder",
+    "dist": "electron-builder --publish=never"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/abhijeetborse37/Setu_Desktop_App.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/abhijeetborse37/Setu_Desktop_App/issues"
+  },
+  "homepage": "https://github.com/abhijeetborse37/Setu_Desktop_App#readme",
+  "dependencies": {
+  },
+  "devDependencies": {
+    "electron": "^41.0.3",
+    "electron-builder": "^24.0.0"
+  },
+  "build": {
+    "appId": "com.setu.desktop",
+    "productName": "Setu Desktop App",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "Electron/**/*",
+      "Setu_ERP/dist/**/*",
+      "publish/api/**/*",
+      "node_modules/**/*"
+    ],
+    "win": {
+      "target": "nsis"
+    }
+  }
+}
+
+
+
