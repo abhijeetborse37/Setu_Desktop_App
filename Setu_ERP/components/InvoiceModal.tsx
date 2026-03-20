@@ -392,12 +392,12 @@ const InvoiceModal: React.FC<Props> = ({ transaction, company, customer, onClose
                       <td className="px-4 py-2 text-xs font-semibold text-slate-700">CGST</td>
                       <td className="px-4 py-2 text-right text-xs font-semibold text-slate-900">{symbol}{totalCGST.toFixed(2)}</td>
                     </tr>
-                    {transaction.roundOff && (
+                    {transaction.roundOff !== undefined && transaction.roundOff !== 0 ? (
                       <tr className="border-b border-slate-300">
                         <td className="px-4 py-2 text-xs font-semibold text-slate-700">Round Off</td>
                         <td className="px-4 py-2 text-right text-xs font-semibold text-slate-900">{symbol}{transaction.roundOff.toFixed(2)}</td>
                       </tr>
-                    )}
+                    ) : null}
                     <tr className="bg-blue-50 border-t-2 border-slate-900">
                       <td className="px-4 py-3 text-xs font-bold text-slate-900">GRAND TOTAL</td>
                       <td className="px-4 py-3 text-right text-lg font-black text-blue-600">{symbol}{grandTotal.toFixed(2)}</td>

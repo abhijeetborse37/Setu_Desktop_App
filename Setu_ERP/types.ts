@@ -81,6 +81,7 @@ export interface Company {
   expenses: number;
   incorporationDate: string;
   website?: string;
+  supplierName?: string;
 }
 
 export interface Product {

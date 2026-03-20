@@ -43,10 +43,22 @@ const SalesManager: React.FC<Props> = ({ products, customers, transactions, acti
 
   const [customerId, setCustomerId] = useState('');
   const [saleDate, setSaleDate] = useState(new Date().toISOString().split('T')[0]);
+  const [invoiceNumber, setInvoiceNumber] = useState('');
   const [roundOff, setRoundOff] = useState<string | number>('');
   const [lineItems, setLineItems] = useState<SaleLineItem[]>([
     { id: '1', productId: '', quantity: '', price: '', cgstRate: '', sgstRate: '' }
   ]);
+
+  const autoInvoiceNumber = useMemo(() => {
+    const saleInvoices = transactions
+      .filter(t => t.type === 'SALE' && t.invoiceNumber)
+      .map(t => {
+        const numMatch = t.invoiceNumber.match(/^\d+$/);
+        return numMatch ? parseInt(numMatch[0], 10) : 0;
+      });
+    const maxNum = saleInvoices.length > 0 ? Math.max(...saleInvoices) : 0;
+    return (maxNum + 1).toString();
+  }, [transactions]);
 
   const addLineItem = () => {
     setLineItems([...lineItems, { id: Math.random().toString(), productId: '', quantity: '', price: '', cgstRate: '', sgstRate: '' }]);
@@ -177,6 +189,7 @@ const SalesManager: React.FC<Props> = ({ products, customers, transactions, acti
         sgstTotal: currentSummary.sgstTotal,
         roundOff: currentSummary.roundOff,
         date: currentSaleDate,
+        invoiceNumber: invoiceNumber || autoInvoiceNumber,
         entityName: customer.name,
         entityGstNumber: customer.gstPanId || '',
         companyId: activeCompany?.id || '',
@@ -210,6 +223,7 @@ const SalesManager: React.FC<Props> = ({ products, customers, transactions, acti
     const customer = customers.find(c => c.name === t.entityName);
     setCustomerId(customer?.id || '');
     setSaleDate(t.date.split('T')[0]);
+    setInvoiceNumber(t.invoiceNumber || '');
     setEditingTransactionId(t.id);
     setRoundOff(t.roundOff || '');
     setLineItems(t.items.map(item => ({
@@ -240,6 +254,7 @@ const SalesManager: React.FC<Props> = ({ products, customers, transactions, acti
     setCustomerId('');
     setEditingTransactionId(null);
     setRoundOff('');
+    setInvoiceNumber('');
     setSaleDate(new Date().toISOString().split('T')[0]);
     setLineItems([{ id: '1', productId: '', quantity: '', price: '', cgstRate: '', sgstRate: '' }]);
   };
@@ -484,7 +499,7 @@ const SalesManager: React.FC<Props> = ({ products, customers, transactions, acti
                 </button>
               </div>
               <form onSubmit={handleSubmit} className="p-4 sm:p-8 space-y-6 max-h-[85vh] overflow-y-auto custom-scrollbar">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 pb-6 border-b border-slate-100">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 pb-6 border-b border-slate-100">
                   <div>
                     <label className="block text-[10px] font-bold text-slate-500 uppercase mb-2">Customer</label>
                     <select required className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 text-sm"
@@ -492,6 +507,11 @@ const SalesManager: React.FC<Props> = ({ products, customers, transactions, acti
                       <option value="">Select customer...</option>
                       {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-2">Invoice No</label>
+                    <input type="text" disabled className="w-full bg-slate-100 text-slate-400 border border-slate-200 rounded-xl px-4 py-3 outline-none cursor-not-allowed font-mono font-bold text-sm"
+                      value={invoiceNumber || (!editingTransactionId ? autoInvoiceNumber : '')} />
                   </div>
                   <div>
                     <label className="block text-[10px] font-bold text-slate-500 uppercase mb-2">Order Date</label>

@@ -50,7 +50,7 @@ const Analytics: React.FC<Props> = ({ company, products, transactions }) => {
       return;
     }
 
-    const headers = ['Date', 'Invoice Number', 'Type', 'Entity (Customer/Supplier)', 'GST Number', 'Description', `Grand Total (In ${company.currency})`];
+    const headers = ['Date', 'Invoice Number', 'Type', 'Entity (Customer/Supplier)', 'GST Number', 'Description', `Grand Total (${company.currencySymbol || '$'})`];
     const rows = filteredTransactions.map(t => [
       formatDate(t.date),
       t.invoiceNumber,
@@ -66,7 +66,7 @@ const Analytics: React.FC<Props> = ({ company, products, transactions }) => {
       ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
     ].join('\n');
 
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
     const url = URL.createObjectURL(blob);
     const typeLabel = transactionType === 'ALL' ? 'All' : transactionType;

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { adminService } from '../services/api';
-import { SubscriptionPlan, UserSubscription, BusinessType } from '../types';
+import { SubscriptionPlan, UserSubscription, BusinessType, Company } from '../types';
 import { formatDisplayDate } from '../utils';
 
 // IFSC Code database (sample Indian banks)
@@ -92,6 +92,12 @@ const AdminPanel: React.FC = () => {
   const [businessFormError, setBusinessFormError] = useState('');
   const [businessFormLoading, setBusinessFormLoading] = useState(false);
 
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [companyPage, setCompanyPage] = useState(1);
+  const [companyPageSize] = useState(10);
+  const [companyFilter, setCompanyFilter] = useState({ owner: '', name: '', taxId: '' });
+  const [editingCompanyId, setEditingCompanyId] = useState<string | null>(null);
+
   // Plan management
   const [showPlanForm, setShowPlanForm] = useState(false);
   const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
@@ -134,6 +140,10 @@ const AdminPanel: React.FC = () => {
         .then(res => setPlans(res.data))
         .catch(err => console.error('Error fetching plans:', err));
 
+      adminService.getCompanies()
+        .then(res => setCompanies(res.data))
+        .catch(err => console.error('Error fetching companies:', err));
+
       // Wait a moment for the critical ones to likely complete before hiding spinner
       await new Promise(resolve => setTimeout(resolve, 800));
     } finally {
@@ -141,7 +151,7 @@ const AdminPanel: React.FC = () => {
     }
   };
 
-  useEffect(() => { fetchData(); }, [activeSubTab]);
+  useEffect(() => { fetchData(); }, []);
 
   const handleApprove = async (id: string) => {
     if (!window.confirm('Approve this subscription request?')) return;
@@ -253,7 +263,7 @@ const AdminPanel: React.FC = () => {
   const handleRegisterBusiness = async () => {
     setBusinessFormError('');
     setBankValidationErrors({});
-    
+
     if (!businessFormUser) {
       setBusinessFormError('Please select a customer.');
       return;
@@ -263,17 +273,16 @@ const AdminPanel: React.FC = () => {
       return;
     }
 
-    // Validate bank details
     const errors: any = {};
     const accountValidation = validateAccountNumber(businessFormData.bankAccount);
     if (!accountValidation.valid) errors.bankAccount = accountValidation.message;
-    
+
     const bankNameValidation = validateBankName(businessFormData.bankName);
     if (!bankNameValidation.valid) errors.bankName = bankNameValidation.message;
-    
+
     const ifscValidation = validateIFSC(businessFormData.ifscCode);
     if (!ifscValidation.valid) errors.ifscCode = ifscValidation.message;
-    
+
     if (!businessFormData.branchName) {
       errors.branchName = 'Branch Name is required';
     }
@@ -283,18 +292,29 @@ const AdminPanel: React.FC = () => {
       setBusinessFormError('Please fix the bank details errors.');
       return;
     }
-    
+
+    const payload = {
+      userId: businessFormUser.id,
+      ...businessFormData,
+      type: Number(businessFormData.type),
+      employees: Number(businessFormData.employees) || 0,
+      revenue: Number(businessFormData.revenue) || 0,
+      expenses: Number(businessFormData.expenses) || 0,
+    };
+
     setBusinessFormLoading(true);
+
     try {
-      await adminService.registerCompanyForUser({
-        userId: businessFormUser.id,
-        ...businessFormData,
-        type: Number(businessFormData.type),
-        employees: Number(businessFormData.employees) || 0,
-        revenue: Number(businessFormData.revenue) || 0,
-        expenses: Number(businessFormData.expenses) || 0,
-      });
+      if (editingCompanyId) {
+        await adminService.updateCompany(editingCompanyId, { ...payload, id: editingCompanyId });
+        alert('Business updated successfully!');
+      } else {
+        await adminService.registerCompanyForUser(payload);
+        alert('Business registered successfully!');
+      }
+
       setShowBusinessForm(false);
+      setEditingCompanyId(null);
       setBusinessFormUser(null);
       setBusinessFormError('');
       setBankValidationErrors({});
@@ -304,14 +324,73 @@ const AdminPanel: React.FC = () => {
         bankName: '', ifscCode: '', branchName: '', industry: '', employees: 0, revenue: 0, expenses: 0,
         incorporationDate: new Date().toISOString().split('T')[0], website: ''
       });
-      alert('Business registered successfully!');
       fetchData();
     } catch (err: any) {
-      setBusinessFormError(err?.response?.data?.message || 'Failed to register business.');
+      setBusinessFormError(err?.response?.data?.message || (editingCompanyId ? 'Failed to update business.' : 'Failed to register business.'));
     } finally {
       setBusinessFormLoading(false);
     }
   };
+
+  const handleEditCompany = (company: Company) => {
+    const user = users.find((u) => u.id === company.userId) || null;
+    setEditingCompanyId(company.id);
+    setBusinessFormUser(user);
+
+    setBusinessFormData({
+      name: company.name,
+      address: company.address,
+      country: company.country,
+      currency: company.currency,
+      currencySymbol: company.currencySymbol,
+      contact: company.contact,
+      type: company.type,
+      taxId: company.taxId,
+      gstNumber: company.gstNumber || '',
+      licenseNumber: company.licenseNumber,
+      bankAccount: company.bankAccount,
+      bankName: company.bankName || '',
+      ifscCode: company.ifscCode || '',
+      branchName: company.branchName || '',
+      industry: company.industry,
+      employees: company.employees,
+      revenue: company.revenue,
+      expenses: company.expenses,
+      incorporationDate: company.incorporationDate ? new Date(company.incorporationDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+      website: company.website || ''
+    });
+
+    setBankValidationErrors({});
+    setBusinessFormError('');
+    setShowBusinessForm(true);
+  };
+
+  const handleDeleteCompany = async (companyId: string) => {
+    if (!window.confirm('Are you sure you want to delete this business? This action cannot be undone.')) return;
+    try {
+      await adminService.deleteCompany(companyId);
+      alert('Business deleted successfully!');
+      fetchData();
+    } catch (error: any) {
+      alert(error?.response?.data?.message || 'Failed to delete business.');
+    }
+  };
+
+  useEffect(() => {
+    setCompanyPage(1);
+  }, [companyFilter.owner, companyFilter.name, companyFilter.taxId]);
+
+  const filteredCompanies = companies.filter((company) => {
+    const ownerName = users.find((u) => u.id === company.userId)?.name?.toLowerCase() || '';
+    return (
+      (!companyFilter.owner || ownerName.includes(companyFilter.owner.toLowerCase())) &&
+      (!companyFilter.name || company.name.toLowerCase().includes(companyFilter.name.toLowerCase())) &&
+      (!companyFilter.taxId || company.taxId.toLowerCase().includes(companyFilter.taxId.toLowerCase()))
+    );
+  });
+
+  const totalCompanyPages = Math.max(1, Math.ceil(filteredCompanies.length / companyPageSize));
+  const paginatedCompanies = filteredCompanies.slice((companyPage - 1) * companyPageSize, companyPage * companyPageSize);
 
   const handleSavePlan = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -458,12 +537,12 @@ const AdminPanel: React.FC = () => {
           <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight uppercase">Admin Portal</h1>
           <p className="text-[9px] sm:text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em]">Platform Management &amp; Control</p>
         </div>
-        <div className="flex flex-col sm:flex-wrap gap-1 sm:gap-2 bg-white p-1 rounded-2xl border border-slate-200 shadow-sm w-full sm:w-fit">
+        <div className="flex flex-row flex-wrap items-center justify-start gap-2 bg-white p-1 rounded-2xl border border-slate-200 shadow-sm w-fit max-w-full">
           {(['dashboard', 'subscriptions', 'plans', 'businesses'] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveSubTab(tab)}
-              className={`px-3 sm:px-5 py-2 sm:py-2 rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all flex-1 sm:flex-none text-center ${
+              className={`px-3 sm:px-4 py-2 rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all text-center ${
                 activeSubTab === tab ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-400 hover:text-slate-600'
               }`}
             >
@@ -722,15 +801,120 @@ const AdminPanel: React.FC = () => {
           <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm p-6">
             <div className="flex items-center justify-between ml-0 mb-6">
               <div>
-                <h3 className="font-black text-slate-800 uppercase tracking-tight">Register Business for Customer</h3>
-                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Create a new business account for any customer</p>
+                <h3 className="font-black text-slate-800 uppercase tracking-tight">Businesses</h3>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">List, filter, edit and delete businesses</p>
               </div>
               <button
-                onClick={() => { setShowBusinessForm(true); setBusinessFormUser(null); setBusinessFormError(''); }}
+                onClick={() => {
+                  setShowBusinessForm(true);
+                  setBusinessFormUser(null);
+                  setEditingCompanyId(null);
+                  setBusinessFormError('');
+                }}
                 className="bg-blue-600 text-white px-6 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-blue-500/20 flex items-center gap-2"
               >
                 <i className="fas fa-plus"></i> New Business
               </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              <div>
+                <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Customer</label>
+                <input
+                  type="text"
+                  value={companyFilter.owner}
+                  onChange={(e) => setCompanyFilter((prev) => ({ ...prev, owner: e.target.value }))}
+                  placeholder="Search by customer name"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Business Name</label>
+                <input
+                  type="text"
+                  value={companyFilter.name}
+                  onChange={(e) => setCompanyFilter((prev) => ({ ...prev, name: e.target.value }))}
+                  placeholder="Search by business name"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Tax ID</label>
+                <input
+                  type="text"
+                  value={companyFilter.taxId}
+                  onChange={(e) => setCompanyFilter((prev) => ({ ...prev, taxId: e.target.value }))}
+                  placeholder="Search by Tax ID"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm"
+                />
+              </div>
+            </div>
+
+            <div className="overflow-auto border border-slate-200 rounded-xl p-1">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-100 text-slate-600">
+                  <tr>
+                    <th className="px-3 py-2">Business Name</th>
+                    <th className="px-3 py-2">Customer</th>
+                    <th className="px-3 py-2">Tax ID</th>
+                    <th className="px-3 py-2">Type</th>
+                    <th className="px-3 py-2">Contact</th>
+                    <th className="px-3 py-2">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginatedCompanies.length === 0 ? (
+                    <tr>
+                      <td className="px-3 py-4 text-slate-500" colSpan={6}>No businesses found.</td>
+                    </tr>
+                  ) : (
+                    paginatedCompanies.map((company) => {
+                      const owner = users.find((u) => u.id === company.userId)?.name || 'Unknown';
+                      const typeText = (BusinessType as any)[company.type] || 'Unknown';
+                      return (
+                        <tr key={company.id} className="border-t border-slate-100 hover:bg-slate-50">
+                          <td className="px-3 py-3 font-bold text-slate-800">{company.name}</td>
+                          <td className="px-3 py-3">{owner}</td>
+                          <td className="px-3 py-3">{company.taxId}</td>
+                          <td className="px-3 py-3">{typeText}</td>
+                          <td className="px-3 py-3">{company.contact}</td>
+                          <td className="px-3 py-3 space-x-2">
+                            <button
+                              onClick={() => handleEditCompany(company)}
+                              className="px-2 py-1 text-[10px] bg-blue-50 text-blue-600 rounded-lg font-black uppercase tracking-widest"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => handleDeleteCompany(company.id)}
+                              className="px-2 py-1 text-[10px] bg-red-50 text-red-600 rounded-lg font-black uppercase tracking-widest"
+                            >
+                              Delete
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex items-center justify-between text-[10px] text-slate-500 mt-3">
+              <span>Showing {Math.min(filteredCompanies.length, (companyPage - 1) * companyPageSize + 1)} to {Math.min(filteredCompanies.length, companyPage * companyPageSize)} of {filteredCompanies.length}</span>
+              <div className="inline-flex items-center gap-2">
+                <button
+                  disabled={companyPage <= 1}
+                  onClick={() => setCompanyPage((p) => Math.max(1, p - 1))}
+                  className="px-3 py-1 rounded-lg border border-slate-200 bg-white disabled:opacity-40"
+                >Prev</button>
+                <span>Page {companyPage}/{totalCompanyPages}</span>
+                <button
+                  disabled={companyPage >= totalCompanyPages}
+                  onClick={() => setCompanyPage((p) => Math.min(totalCompanyPages, p + 1))}
+                  className="px-3 py-1 rounded-lg border border-slate-200 bg-white disabled:opacity-40"
+                >Next</button>
+              </div>
             </div>
           </div>
         </div>

@@ -166,6 +166,10 @@ namespace Setu.Api.Controllers
                 existing.EntityName = transaction.EntityName;
                 existing.TotalAmount = transaction.TotalAmount;
                 existing.TotalTax = transaction.TotalTax;
+                existing.CgstTotal = transaction.CgstTotal;
+                existing.SgstTotal = transaction.SgstTotal;
+                existing.RoundOff = transaction.RoundOff;
+                existing.EntityGstNumber = transaction.EntityGstNumber;
                 
                 if (!string.IsNullOrEmpty(transaction.InvoiceNumber)) {
                     existing.InvoiceNumber = transaction.InvoiceNumber;

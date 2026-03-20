@@ -21,7 +21,12 @@ const Header: React.FC<HeaderProps> = ({ activeTab, companyName, onMenuClick }) 
           <i className="fas fa-bars"></i>
         </button>
         <div>
-          <h1 className="text-lg md:text-2xl font-bold text-slate-800 leading-none">{currentTitle}</h1>
+          {/* <h1 className="text-lg md:text-2xl font-bold text-slate-800 leading-none">{currentTitle}</h1> */}
+          {companyName && (
+            <p className="text-[10px] md:text-xs text-slate-500 font-bold uppercase tracking-widest mt-1">
+              Portfolio: <span className="text-blue-600">{companyName}</span>
+            </p>
+          )}
         </div>
       </div>
 

@@ -69,12 +69,12 @@ const App: React.FC = () => {
       setTransactions(normalizedTransactions);
 
       // Set active company
-      let currentActiveId = data.activeCompanyId || activeCompanyId;
+      let currentActiveId = activeCompanyId || data.activeCompanyId;
       if (!currentActiveId || !normalizedCompanies.find((c: any) => c.id === currentActiveId)) {
         currentActiveId = normalizedCompanies.length > 0 ? normalizedCompanies[0].id : null;
       }
       
-      if (currentActiveId) {
+      if (currentActiveId && currentActiveId !== activeCompanyId) {
         setActiveCompanyId(currentActiveId);
       }
     } catch (err: any) {
@@ -132,6 +132,19 @@ const App: React.FC = () => {
     companies.find(c => c.id === activeCompanyId) || null,
     [companies, activeCompanyId]);
 
+  // Filtered data scoped to the active company only
+  const activeProducts = useMemo(() =>
+    activeCompanyId ? products.filter(p => p.companyId === activeCompanyId) : products,
+    [products, activeCompanyId]);
+
+  const activeCustomers = useMemo(() =>
+    activeCompanyId ? customers.filter(c => (c as any).companyId === activeCompanyId) : customers,
+    [customers, activeCompanyId]);
+
+  const activeTransactions = useMemo(() =>
+    activeCompanyId ? transactions.filter(t => (t as any).companyId === activeCompanyId) : transactions,
+    [transactions, activeCompanyId]);
+
   const isAdmin = currentUser?.role === UserRole.ADMIN;
 
   const navigateTo = (tab: string) => {
@@ -171,7 +184,7 @@ const App: React.FC = () => {
     switch (activeTab) {
       case 'dashboard':
         if (isAdmin) return <AccessDenied />;
-        return <Dashboard company={activeCompany} products={products} customers={customers} transactions={transactions} onNavigate={navigateTo} />;
+        return <Dashboard company={activeCompany} products={activeProducts} customers={activeCustomers} transactions={activeTransactions} onNavigate={navigateTo} />;
       case 'companies':
         if (isAdmin) return <AccessDenied />;
         return (
@@ -179,21 +192,21 @@ const App: React.FC = () => {
             companies={companies}
             activeId={activeCompanyId}
             setActiveId={setActiveCompanyId}
-            products={products}
-            transactions={transactions}
+            products={activeProducts}
+            transactions={activeTransactions}
             currentUser={currentUser}
             onDataChange={fetchData}
           />
         );
       case 'inventory':
         if (isAdmin) return <AccessDenied />;
-        return <InventoryManager products={products} transactions={transactions} activeCompany={activeCompany} currentUser={currentUser} onDataChange={fetchData} />;
+        return <InventoryManager products={activeProducts} transactions={activeTransactions} activeCompany={activeCompany} currentUser={currentUser} onDataChange={fetchData} />;
       case 'sales':
         if (isAdmin) return <AccessDenied />;
-        return <SalesManager products={products} customers={customers} transactions={transactions} activeCompany={activeCompany} currentUser={currentUser} onDataChange={fetchData} />;
+        return <SalesManager products={activeProducts} customers={customers} transactions={activeTransactions} activeCompany={activeCompany} currentUser={currentUser} onDataChange={fetchData} />;
       case 'products':
         if (isAdmin) return <AccessDenied />;
-        return <ProductManager products={products} onDataChange={fetchData} activeCompanyId={activeCompanyId} currencySymbol={activeCompany?.currencySymbol || '₹'} currentUser={currentUser!} />;
+        return <ProductManager products={activeProducts} onDataChange={fetchData} activeCompanyId={activeCompanyId} activeCompany={activeCompany} currencySymbol={activeCompany?.currencySymbol || '₹'} currentUser={currentUser!} />;
       case 'customers':
         if (isAdmin) return <AccessDenied />;
         return <CustomerManager customers={customers} onDataChange={fetchData} activeCompanyId={activeCompanyId} currencySymbol={activeCompany?.currencySymbol || '₹'} currentUser={currentUser!} />;
@@ -203,12 +216,12 @@ const App: React.FC = () => {
         return isAdmin ? <AdminPanel /> : <AccessDenied />;
       case 'analytics':
         if (isAdmin) return <AccessDenied />;
-        return <Analytics company={activeCompany} products={products} transactions={transactions} />;
+        return <Analytics company={activeCompany} products={activeProducts} transactions={activeTransactions} />;
       case 'profile':
         return <EditProfile currentUser={currentUser} onProfileUpdated={handleProfileUpdated} />;
       default:
         if (isAdmin) return <AdminPanel />;
-        return <Dashboard company={activeCompany} products={products} customers={customers} transactions={transactions} onNavigate={navigateTo} />;
+        return <Dashboard company={activeCompany} products={activeProducts} customers={activeCustomers} transactions={activeTransactions} onNavigate={navigateTo} />;
     }
   };
 

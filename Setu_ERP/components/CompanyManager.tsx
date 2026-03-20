@@ -157,8 +157,8 @@ const CompanyManager: React.FC<Props> = ({ companies, activeId, setActiveId, pro
     <div className="space-y-8 animate-in slide-in-from-bottom-4 duration-500">
       <div className="flex justify-between items-center px-4 md:px-0">
         <div>
-          <h2 className="text-xl font-black text-slate-800 tracking-tight uppercase">Corporate Portfolio</h2>
-          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Global Master Data Management</p>
+          <h2 className="text-xl font-bold text-slate-800 tracking-tight">Corporate Portfolio</h2>
+          <p className="text-xs text-slate-500 uppercase font-bold tracking-widest">Global Master Data Management</p>
         </div>
         {isAdmin && (
           <button onClick={() => setShowForm(true)} className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-2xl font-black shadow-lg shadow-blue-500/30 transition-all flex items-center text-[10px] uppercase tracking-[0.2em]">

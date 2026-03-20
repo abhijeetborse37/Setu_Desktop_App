@@ -34,12 +34,24 @@ const InventoryManager: React.FC<Props> = ({ products, transactions, activeCompa
     productId: '',
     supplierName: '',
     entityGstNumber: '',
+    invoiceNumber: '',
     quantity: '' as string | number,
     unitCost: '' as string | number,
     cgstRate: '' as string | number,
     sgstRate: '' as string | number,
     date: new Date().toISOString().split('T')[0]
   });
+
+  const autoInvoiceNumber = useMemo(() => {
+    const purchaseInvoices = transactions
+      .filter(t => t.type === 'PURCHASE' && t.invoiceNumber)
+      .map(t => {
+        const numMatch = t.invoiceNumber.match(/^\d+$/);
+        return numMatch ? parseInt(numMatch[0], 10) : 0;
+      });
+    const maxNum = purchaseInvoices.length > 0 ? Math.max(...purchaseInvoices) : 0;
+    return (maxNum + 1).toString();
+  }, [transactions]);
 
   const lowStockProducts = useMemo(() => {
     return products.filter(p => p.stock <= 5);
@@ -72,6 +84,7 @@ const InventoryManager: React.FC<Props> = ({ products, transactions, activeCompa
       productId: item.productId,
       supplierName: transaction.entityName,
       entityGstNumber: transaction.entityGstNumber || '',
+      invoiceNumber: transaction.invoiceNumber || '',
       quantity: item.quantity,
       unitCost: item.unitPrice,
       cgstRate: item.cgstRate || (item.taxRate ? item.taxRate / 2 : ''),
@@ -138,6 +151,7 @@ const InventoryManager: React.FC<Props> = ({ products, transactions, activeCompa
       date: formData.date,
       entityName: formData.supplierName,
       entityGstNumber: formData.entityGstNumber,
+      invoiceNumber: formData.invoiceNumber || autoInvoiceNumber,
       type: 'PURCHASE',
       companyId: activeCompany?.id || '',
       userId: currentUser.id
@@ -169,6 +183,7 @@ const InventoryManager: React.FC<Props> = ({ products, transactions, activeCompa
       productId: '',
       supplierName: '',
       entityGstNumber: '',
+      invoiceNumber: autoInvoiceNumber,
       quantity: '',
       unitCost: '',
       cgstRate: '',
@@ -414,11 +429,16 @@ const InventoryManager: React.FC<Props> = ({ products, transactions, activeCompa
                   {products.map(p => <option key={p.id} value={p.id}>{p.name} (SKU: {p.sku})</option>)}
                 </select>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-[10px] font-black text-slate-500 uppercase mb-2 tracking-widest">Supplier Name</label>
                   <input required type="text" placeholder="Who supplied this?" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs focus:ring-2 focus:ring-blue-500 outline-none"
                     value={formData.supplierName} onChange={e => setFormData({ ...formData, supplierName: e.target.value })} />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black text-slate-500 uppercase mb-2 tracking-widest">Invoice Number</label>
+                  <input type="text" disabled className="w-full bg-slate-100 text-slate-400 border border-slate-200 rounded-xl px-4 py-3 text-xs outline-none cursor-not-allowed font-mono font-bold"
+                    value={formData.invoiceNumber || (!editingTransactionId ? autoInvoiceNumber : '')} />
                 </div>
                 <div>
                   <label className="block text-[10px] font-black text-slate-500 uppercase mb-2 tracking-widest">Supplier GST Number</label>
