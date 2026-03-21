@@ -18,8 +18,8 @@ const getAPIUrl = (): string => {
   const hostname = window.location.hostname;
 
   // Local development
-  if (hostname === "localhost" || hostname === "127.0.0.1") {
-    return "http://localhost:5039/api";
+  if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "") {
+    return "http://localhost:8080/api";
   }
 
   // Production (Render backend)

@@ -10,8 +10,8 @@ using StackExchange.Redis;
 var builder = WebApplication.CreateBuilder(args);
 //AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
 
-var port = Environment.GetEnvironmentVariable("PORT") ?? "5039";
-builder.WebHost.UseUrls($"http://*:{port}");
+var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
+builder.WebHost.UseUrls($"http://localhost:{port}");
 
 // Add services to the container.
 builder.Services.AddControllers()
@@ -134,18 +134,28 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     });
 
 // CORS
+// builder.Services.AddCors(options =>
+// {
+//     options.AddPolicy("AllowFrontend", policy =>
+//     {
+//         policy.WithOrigins(
+//                 "https://setu.abhijitborse3797.workers.dev",
+//                 "http://localhost:5173",
+//                 "http://localhost:3000"
+//             )
+//             .AllowAnyHeader()
+//             .AllowAnyMethod()
+//             .AllowCredentials();
+//     });
+// });
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
-        policy.WithOrigins(
-                "https://setu.abhijitborse3797.workers.dev",
-                "http://localhost:5173",
-                "http://localhost:3000"
-            )
-            .AllowAnyHeader()
-            .AllowAnyMethod()
-            .AllowCredentials();
+        policy.AllowAnyOrigin()
+              .AllowAnyHeader()
+              .AllowAnyMethod();
     });
 });
 
@@ -159,8 +169,8 @@ using (var scope = app.Services.CreateScope())
 
     try
     {
-        //db.Database.Migrate(); // Ensure migrations are applied
-        db.Database.EnsureCreated();
+        db.Database.Migrate(); // Ensure migrations are applied
+        //db.Database.EnsureCreated();
 
         var hasAdmin = db.Users.Any(u => u.Role == Setu.Api.Models.UserRole.Admin);
         if (!hasAdmin)
