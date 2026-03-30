@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, UserRole } from '../types';
-import { authService, adminService } from '../services/api';
+import { adminService, authService } from '../services/api';
+import { validators } from '../utils';
 
 interface Props {
   currentUser: User | null;
@@ -22,6 +23,7 @@ const UserManager: React.FC<Props> = ({ currentUser }) => {
   const [showForm, setShowForm] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
+    username: '',
     email: '',
     password: '',
     contactNo: '',
@@ -55,21 +57,34 @@ const UserManager: React.FC<Props> = ({ currentUser }) => {
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    if (!formData.name || !formData.email || formData.password.length < 6) {
-      setError('Please fill all fields. Password must be at least 6 characters.');
+    if (!validators.name(formData.name)) {
+      setError('Please provide a valid full name.');
+      return;
+    }
+    if (!validators.email(formData.email)) {
+      setError('Please provide a valid email address.');
+      return;
+    }
+    if (!validators.password(formData.password)) {
+      setError('Password must be at least 6 characters.');
+      return;
+    }
+    if (formData.contactNo && !validators.phone(formData.contactNo)) {
+      setError('Please provide a valid contact number (10-15 digits).');
       return;
     }
     setIsLoading(true);
     try {
       const res = await authService.createUser({
         name: formData.name.trim(),
+        username: formData.username.trim() || undefined,
         email: formData.email.toLowerCase(),
         password: formData.password,
         contactNo: formData.contactNo,
         role: formData.role,
       });
       setSuccessResult(res.data.user);
-      setFormData({ name: '', email: '', password: '', contactNo: '', role: 'Customer' });
+      setFormData({ name: '', username: '', email: '', password: '', contactNo: '', role: 'Customer' });
       fetchUsers();
       // Open tab access editor for the newly created user
       setTimeout(() => {
@@ -138,8 +153,8 @@ const UserManager: React.FC<Props> = ({ currentUser }) => {
     <div className="space-y-8 animate-in fade-in duration-500">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-black text-slate-800 tracking-tight uppercase">Access Control</h2>
-          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-1">Create &amp; manage customer accounts</p>
+          <h1 className="text-3xl font-black text-slate-900 tracking-tight uppercase mb-2">Access Control & Users</h1>
+          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em]">Manage permissions and secure accounts</p>
         </div>
         <button
           onClick={() => { setShowForm(true); setSuccessResult(null); setError(''); }}
@@ -188,7 +203,7 @@ const UserManager: React.FC<Props> = ({ currentUser }) => {
                         </div>
                         <div>
                           <p className="font-bold text-slate-800 text-sm">{user.name}</p>
-                          <p className="text-[10px] text-slate-400">{user.email}</p>
+                          <p className="text-[10px] text-slate-400">{user.email}{user.username ? ` • @${user.username}` : ''}</p>
                         </div>
                       </div>
                     </td>
@@ -242,7 +257,7 @@ const UserManager: React.FC<Props> = ({ currentUser }) => {
 
       {/* Create User Modal */}
       {showForm && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[80] flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-slate-900/80 z-[80] flex items-center justify-center p-4">
           <div className="bg-white rounded-[2rem] w-full max-w-lg shadow-2xl overflow-hidden animate-in zoom-in-95">
             <div className="h-1.5 bg-gradient-to-r from-blue-600 to-emerald-500"></div>
             <div className="p-8">
@@ -256,6 +271,7 @@ const UserManager: React.FC<Props> = ({ currentUser }) => {
                   <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 text-left space-y-2 mb-6">
                     <p className="text-xs"><span className="font-black text-slate-500 uppercase tracking-widest text-[9px] block mb-0.5">Name</span> <span className="font-bold text-slate-800">{successResult.name}</span></p>
                     <p className="text-xs"><span className="font-black text-slate-500 uppercase tracking-widest text-[9px] block mb-0.5">Email</span> <span className="font-mono text-blue-600 font-bold">{successResult.email}</span></p>
+                    {successResult.username && <p className="text-xs"><span className="font-black text-slate-500 uppercase tracking-widest text-[9px] block mb-0.5">Username</span> <span className="font-bold text-slate-800">{successResult.username}</span></p>}
                     {successResult.contactNo && <p className="text-xs"><span className="font-black text-slate-500 uppercase tracking-widest text-[9px] block mb-0.5">Mobile</span> <span className="font-bold text-slate-800">{successResult.contactNo}</span></p>}
                     <p className="text-xs"><span className="font-black text-slate-500 uppercase tracking-widest text-[9px] block mb-0.5">One-Time Password</span> <span className="font-mono text-emerald-600 font-black text-base tracking-widest">{successResult.oneTimePassword}</span></p>
                   </div>
@@ -277,28 +293,36 @@ const UserManager: React.FC<Props> = ({ currentUser }) => {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Full Name *</label>
-                        <input required className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all"
+                        <input required autoFocus className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all"
                           placeholder="John Doe"
-                          value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} />
+                          value={formData.name} onChange={e => setFormData(prev => ({ ...prev, name: e.target.value }))} />
                       </div>
                       <div>
                         <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Contact No.</label>
-                        <input type="text" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none transition-all"
+                        <input type="text" className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none transition-all"
                           placeholder="+91 98765 43210"
-                          value={formData.contactNo} onChange={e => setFormData({ ...formData, contactNo: e.target.value })} />
+                          value={formData.contactNo} onChange={e => setFormData(prev => ({ ...prev, contactNo: e.target.value }))} />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Email Address *</label>
+                        <input required type="email" className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none transition-all"
+                          placeholder="user@example.com"
+                          value={formData.email} onChange={e => setFormData(prev => ({ ...prev, email: e.target.value }))} />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Username (Optional)</label>
+                        <input type="text" className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none transition-all"
+                          placeholder="johndoe123"
+                          value={formData.username} onChange={e => setFormData(prev => ({ ...prev, username: e.target.value }))} />
                       </div>
                     </div>
                     <div>
-                      <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Email Address *</label>
-                      <input required type="email" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none transition-all"
-                        placeholder="user@example.com"
-                        value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} />
-                    </div>
-                    <div>
                       <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Initial Password *</label>
-                      <input required type="text" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none font-mono transition-all"
+                      <input required type="text" className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none font-mono transition-all"
                         placeholder="Set a one-time password (min 6 chars)"
-                        value={formData.password} onChange={e => setFormData({ ...formData, password: e.target.value })} />
+                        value={formData.password} onChange={e => setFormData(prev => ({ ...prev, password: e.target.value }))} />
                     </div>
                     <div>
                       <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Role</label>
@@ -338,7 +362,7 @@ const UserManager: React.FC<Props> = ({ currentUser }) => {
 
       {/* Tab Access Editor Modal */}
       {tabEditingUser && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[80] flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-slate-900/80 z-[80] flex items-center justify-center p-4">
           <div className="bg-white rounded-[2rem] w-full max-w-md shadow-2xl overflow-hidden animate-in zoom-in-95">
             <div className="h-1.5 bg-gradient-to-r from-blue-600 to-emerald-500"></div>
             <div className="p-8">
@@ -381,7 +405,7 @@ const UserManager: React.FC<Props> = ({ currentUser }) => {
 
       {/* Reset Password Modal */}
       {resetPasswordUser && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[80] flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-slate-900/80 z-[80] flex items-center justify-center p-4">
           <div className="bg-white rounded-[2rem] w-full max-w-sm shadow-2xl overflow-hidden animate-in zoom-in-95 p-8">
             <h3 className="font-black text-slate-800 text-lg uppercase tracking-tight mb-1">Reset Password</h3>
             <p className="text-xs text-slate-500 mb-6">Set a new one-time password for <strong>{resetPasswordUser.name}</strong></p>

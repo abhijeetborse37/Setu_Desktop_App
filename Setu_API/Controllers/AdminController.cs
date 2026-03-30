@@ -119,11 +119,7 @@ namespace Setu.Api.Controllers
             if (existing != null) _context.Subscriptions.Remove(existing);
 
             var startDate = dto.StartDate ?? DateTime.UtcNow;
-            DateTime endDate = plan.Validity == "Yearly"
-                ? startDate.AddYears(1)
-                : plan.Validity == "Quarterly"
-                    ? startDate.AddMonths(3)
-                    : startDate.AddMonths(1);
+            DateTime endDate = _subscriptionService.CalculateEndDate(startDate, plan.Validity);
 
             var sub = new Subscription
             {
@@ -323,10 +319,8 @@ namespace Setu.Api.Controllers
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
 
-                // Return 201 Created with Location header for proper redirection
-                return CreatedAtAction(nameof(CompaniesController.GetCompanies), 
-                    new { companyId = company.Id },
-                    new
+                // Return 201 Created
+                return StatusCode(201, new
                     {
                         status = "success",
                         message = $"Business registered successfully for {user.Name}",
@@ -343,7 +337,7 @@ namespace Setu.Api.Controllers
                         code = "COMPANY_CREATED"
                     });
             }
-            catch (DbUpdateException dbEx)
+            catch (DbUpdateException)
             {
                 await transaction.RollbackAsync();
                 return StatusCode(500, new { status = "error", message = "Database error while registering company. Please try again.", code = "DB_ERROR" });

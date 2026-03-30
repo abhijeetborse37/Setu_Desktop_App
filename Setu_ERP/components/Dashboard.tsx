@@ -143,19 +143,18 @@ const Dashboard: React.FC<DashboardProps> = ({ company, products, customers, tra
     [products]
   );
 
-  // Now safe to do early return
   if (!company) return (
     <div className="flex flex-col items-center justify-center h-[60vh] text-slate-500 py-20 px-4 text-center">
       <div className="w-20 h-20 bg-white shadow-xl shadow-slate-200 rounded-3xl flex items-center justify-center mb-6">
         <i className="fas fa-building text-3xl text-slate-300"></i>
       </div>
-      <h3 className="text-xl font-bold text-slate-800 mb-2">No Active Company</h3>
-      <p className="max-w-xs text-sm text-slate-500">Register or select a company from the My Companies section to access business analytics.</p>
+      <h3 className="text-xl font-bold text-slate-800 mb-2">No Active Business Profile</h3>
+      <p className="max-w-xs text-sm text-slate-500">Please select or register a business entity in the 'Business Entities' section to view analytics.</p>
       <button
         onClick={() => onNavigate('companies')}
         className="mt-6 bg-blue-600 text-white px-8 py-3 rounded-2xl font-bold shadow-lg shadow-blue-500/30 hover:bg-blue-700 transition-all text-sm uppercase tracking-widest"
       >
-        Go to Companies
+        Go to Business Entities
       </button>
     </div>
   );
@@ -163,13 +162,13 @@ const Dashboard: React.FC<DashboardProps> = ({ company, products, customers, tra
   const symbol = company.currencySymbol || '$';
 
   return (
-    <div className="space-y-6 lg:space-y-8 animate-in fade-in duration-500">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-8 animate-in fade-in duration-700">
+      <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6">
         <div>
-          <h2 className="text-xl md:text-2xl font-bold text-slate-800 tracking-tight">Business Overview</h2>
-          <p className="text-slate-500 text-[10px] sm:text-sm uppercase font-bold tracking-widest">Performance for {company.name}</p>
+          <h2 className="text-3xl font-black text-slate-900 tracking-tight mb-1">Business Hub & Insights</h2>
+          <p className="text-sm text-slate-500 font-medium">Real-time financial performance and operational oversight for <span className="text-blue-600 font-bold">{company.name}</span></p>
         </div>
-        <div className="flex bg-white border border-slate-200 rounded-xl p-1 shadow-sm overflow-x-auto max-w-full no-scrollbar">
+        <div className="flex bg-white border border-slate-200/60 rounded-2xl p-1.5 shadow-sm overflow-x-auto no-scrollbar ring-4 ring-slate-100/50">
           {(['DAILY', 'MONTHLY', 'QUARTERLY', 'YEARLY'] as const).map(f => (
             <button
               key={f}
@@ -182,11 +181,11 @@ const Dashboard: React.FC<DashboardProps> = ({ company, products, customers, tra
         </div>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard title="Revenue" value={`${symbol}${totalRevenue.toLocaleString()}`} icon="fa-wallet" color="blue" trend={filter.toLowerCase()} />
-        <StatCard title="Orders" value={totalSalesCount.toString()} icon="fa-shopping-cart" color="purple" trend="Count" />
-        <StatCard title="Low Stock" value={lowStockCount.toString()} icon="fa-exclamation-triangle" color="amber" trend="Alerts" />
-        <StatCard title="Customers" value={customers.length.toString()} icon="fa-users" color="emerald" trend="Total" />
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        <StatCard title="Total Sales Revenue" value={`${symbol}${totalRevenue.toLocaleString()}`} icon="fa-wallet" color="blue" trend={filter.toLowerCase()} />
+        <StatCard title="Active Orders" value={totalSalesCount.toString()} icon="fa-shopping-cart" color="purple" trend="Count" />
+        <StatCard title="Inventory Alerts" value={lowStockCount.toString()} icon="fa-exclamation-triangle" color="amber" trend="Alerts" />
+        <StatCard title="Total Clients (CRM)" value={customers.length.toString()} icon="fa-users" color="emerald" trend="Total" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8">
@@ -222,34 +221,34 @@ const Dashboard: React.FC<DashboardProps> = ({ company, products, customers, tra
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-full">
+        <div className="bg-white p-6 rounded-[2rem] border border-slate-200/60 shadow-sm overflow-hidden flex flex-col h-full ring-4 ring-slate-100/50">
           <div className="flex items-center justify-between mb-6">
-            <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest">Stock Alert</h3>
-            <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">Live Feed</span>
+            <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">Inventory Health</h3>
+            <span className="text-[9px] bg-red-50 text-red-500 px-2 py-1 rounded font-black uppercase tracking-widest animate-pulse">Critical Alerts</span>
           </div>
           <div className="flex-1 space-y-4 overflow-y-auto max-h-[400px] lg:max-h-none pr-1 custom-scrollbar">
             {products.length > 0 ? products.slice(0, 8).map(p => (
-              <div key={p.id} className="flex items-center justify-between p-3 rounded-xl border border-slate-50 hover:bg-slate-50 transition-colors group">
-                <div className="flex items-center space-x-3 truncate">
-                  <div className={`flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center ${p.stock < 10 ? 'bg-red-50 text-red-500' : 'bg-slate-50 text-slate-500'}`}>
-                    <i className="fas fa-box text-xs"></i>
+              <div key={p.id} className="flex items-center justify-between p-4 rounded-2xl border border-slate-50 hover:border-blue-100 hover:bg-blue-50/10 transition-all group cursor-default">
+                <div className="flex items-center space-x-4 truncate">
+                  <div className={`flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-all ${p.stock < 10 ? 'bg-red-50 text-red-500 group-hover:bg-red-500 group-hover:text-white' : 'bg-slate-50 text-slate-400 group-hover:bg-blue-500 group-hover:text-white'}`}>
+                    <i className="fas fa-box text-sm"></i>
                   </div>
                   <div className="truncate">
-                    <p className="text-xs font-bold text-slate-800 truncate uppercase tracking-tight">{p.name}</p>
-                    <p className="text-[9px] text-slate-400 font-mono uppercase truncate">{p.sku}</p>
+                    <p className="text-sm font-bold text-slate-800 truncate tracking-tight">{p.name}</p>
+                    <p className="text-[10px] text-slate-400 font-mono uppercase truncate tracking-widest">{p.sku}</p>
                   </div>
                 </div>
                 <div className="text-right flex-shrink-0 ml-2">
-                  <p className={`text-xs font-black ${p.stock < 10 ? 'text-red-600' : 'text-slate-800'}`}>{p.stock}</p>
+                  <p className={`text-sm font-black ${p.stock < 10 ? 'text-red-600' : 'text-slate-900'}`}>{p.stock}</p>
                 </div>
               </div>
             )) : <p className="text-center text-slate-400 py-10 text-[10px] uppercase font-bold tracking-widest">No Products Logged</p>}
           </div>
           <button
             onClick={() => onNavigate('inventory')}
-            className="mt-6 w-full py-4 bg-slate-900 hover:bg-black text-white rounded-xl text-[10px] uppercase tracking-widest font-black transition-all shadow-xl shadow-slate-200"
+            className="mt-6 w-full py-4 bg-slate-900 hover:bg-black text-white rounded-2xl text-[10px] uppercase tracking-[0.2em] font-black transition-all shadow-xl shadow-slate-200 active:scale-95 flex items-center justify-center"
           >
-            Manage Inventory
+            <i className="fas fa-boxes mr-2"></i> View Full Inventory
           </button>
         </div>
       </div>
@@ -341,18 +340,18 @@ const StatCard: React.FC<{ title: string, value: string, icon: string, color: st
   };
 
   return (
-    <div className="bg-white p-4 sm:p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-xl hover:border-blue-200 transition-all group">
-      <div className="flex items-center justify-between mb-4">
-        <div className={`w-9 sm:w-11 h-9 sm:h-11 rounded-xl flex items-center justify-center ${colorClasses[color]} shadow-sm group-hover:scale-110 transition-transform`}>
-          <i className={`fas ${icon} text-sm sm:text-lg`}></i>
+    <div className="bg-white p-6 lg:p-8 rounded-[2rem] border border-slate-200/60 shadow-sm hover:shadow-2xl hover:shadow-blue-500/10 hover:border-blue-400/50 transition-all group flex flex-col justify-between h-full ring-4 ring-slate-100/50">
+      <div className="flex items-start justify-between mb-8">
+        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${colorClasses[color]} shadow-lg shadow-current/10 group-hover:scale-110 group-hover:rotate-3 transition-all duration-300`}>
+          <i className={`fas ${icon} text-xl sm:text-2xl`}></i>
         </div>
-        <span className="hidden sm:block text-[8px] font-black px-2 py-1 rounded bg-slate-50 text-slate-400 uppercase tracking-widest group-hover:text-blue-500 transition-colors">
+        <span className="text-[10px] font-black px-3 py-1.5 rounded-full bg-slate-50 text-slate-400 uppercase tracking-widest group-hover:bg-blue-600 group-hover:text-white transition-all">
           {trend}
         </span>
       </div>
       <div>
-        <h4 className="text-slate-500 text-[9px] sm:text-[10px] font-black uppercase tracking-widest">{title}</h4>
-        <p className="text-base sm:text-2xl font-black text-slate-800 mt-1 truncate">{value}</p>
+        <h4 className="text-slate-400 text-[10px] sm:text-[11px] font-black uppercase tracking-[0.2em] mb-2">{title}</h4>
+        <p className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight truncate leading-none">{value}</p>
       </div>
     </div>
   );

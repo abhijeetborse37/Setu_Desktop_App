@@ -16,6 +16,7 @@ namespace Setu.Api.Services
         Task<bool> ApproveSubscription(Guid subscriptionId, Guid adminId);
         Task<bool> RejectSubscription(Guid subscriptionId, Guid adminId);
         Task<IEnumerable<Subscription>> GetPendingSubscriptions();
+        DateTime CalculateEndDate(DateTime from, string validity);
     }
 
     public class SubscriptionService : ISubscriptionService
@@ -123,39 +124,11 @@ namespace Setu.Api.Services
             // Calculate end date based on validity
             if (subscription.Plan != null)
             {
-                subscription.EndDate = CalculateEndDate(DateTime.UtcNow, subscription.Plan.Validity);
+                subscription.EndDate = CalculateEndDate(subscription.StartDate ?? DateTime.UtcNow, subscription.Plan.Validity);
             }
             else
             {
                 subscription.EndDate = DateTime.UtcNow.AddMonths(1);
-            }
-
-            // Local helper to determine end date from plan validity
-            DateTime CalculateEndDate(DateTime from, string validity)
-            {
-                if (string.IsNullOrWhiteSpace(validity))
-                    return from.AddMonths(1);
-
-                var normalized = validity.Trim().ToLowerInvariant();
-
-                if (normalized.Contains("year"))
-                    return from.AddYears(1);
-
-                if (normalized.Contains("quarter"))
-                    return from.AddMonths(3);
-
-                if (normalized.Contains("month"))
-                    return from.AddMonths(1);
-
-                // numeric days (e.g. "15", "15 days", "30 day")
-                var digits = System.Text.RegularExpressions.Regex.Match(normalized, "\\d+");
-                if (digits.Success && int.TryParse(digits.Value, out int days))
-                {
-                    return from.AddDays(days);
-                }
-
-                // fallback to monthly
-                return from.AddMonths(1);
             }
 
             subscription.ApprovedBy = adminId;
@@ -185,6 +158,39 @@ namespace Setu.Api.Services
                 .Include(s => s.Plan)
                 .Where(s => s.Status == "Pending")
                 .ToListAsync();
+        }
+
+        public DateTime CalculateEndDate(DateTime from, string validity)
+        {
+            if (string.IsNullOrWhiteSpace(validity))
+                return from.AddMonths(1);
+
+            var normalized = validity.Trim().ToLowerInvariant();
+            var digitsMatch = System.Text.RegularExpressions.Regex.Match(normalized, @"\d+");
+            int value = 1;
+            bool hasDigits = digitsMatch.Success;
+            if (hasDigits)
+            {
+                int.TryParse(digitsMatch.Value, out value);
+            }
+
+            if (normalized.Contains("year"))
+                return from.AddYears(value);
+
+            if (normalized.Contains("quarter"))
+                return from.AddMonths(value * 3);
+
+            if (normalized.Contains("month"))
+                return from.AddMonths(value);
+
+            if (normalized.Contains("day") || hasDigits)
+            {
+                // If it has digits but no year/month/quarter, treat as days
+                return from.AddDays(value);
+            }
+
+            // fallback to 1 month
+            return from.AddMonths(1);
         }
     }
 }

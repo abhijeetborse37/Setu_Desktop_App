@@ -1,8 +1,8 @@
-
 import React, { useState, useMemo } from 'react';
 import { Product, Transaction, Company, TransactionItem, User } from '../types';
 import { transactionService } from '../services/api';
 import { formatDate } from '../utils';
+import SearchableSelect from './SearchableSelect';
 
 interface Props {
   products: Product[];
@@ -199,8 +199,8 @@ const InventoryManager: React.FC<Props> = ({ products, transactions, activeCompa
     <div className="space-y-6 animate-in slide-in-from-bottom-2 duration-300">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h2 className="text-xl font-bold text-slate-800 tracking-tight">Purchase History</h2>
-          <p className="text-xs text-slate-500 uppercase font-bold tracking-widest">Inventory Inflow Records - Fulfills backorders and increases stock</p>
+          <h1 className="text-3xl font-black text-slate-900 tracking-tight mb-2">Inventory & Stock Inflow</h1>
+          <p className="text-[10px] text-slate-400 font-bold tracking-[0.2em]">Manage purchases, fulfill backorders and track incoming stock</p>
         </div>
         <div className="flex w-full sm:w-auto space-x-2 print-hidden">
           <button
@@ -218,16 +218,16 @@ const InventoryManager: React.FC<Props> = ({ products, transactions, activeCompa
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-end">
           <div className="lg:col-span-6">
-            <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Search Records</label>
-            <div className="relative">
+            <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Search Records</label>
+            <div className="relative group">
               <input
                 type="text"
                 placeholder="Search invoice, supplier or product..."
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 pl-11 text-xs focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                className="w-full bg-white border border-slate-300 rounded-xl py-3 px-5 pl-12 text-sm focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 outline-none shadow-sm transition-all"
                 value={searchTerm}
                 onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }}
               />
-              <i className="fas fa-search absolute left-4 top-3.5 text-slate-300"></i>
+              <i className="fas fa-search absolute left-4.5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-blue-500 transition-colors pointer-events-none"></i>
             </div>
           </div>
           <div className="lg:col-span-6 flex flex-col sm:flex-row items-center gap-3">
@@ -407,7 +407,7 @@ const InventoryManager: React.FC<Props> = ({ products, transactions, activeCompa
       </div>
 
       {showModal && (
-        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md z-[70] flex items-center justify-center p-2 sm:p-4 no-print overflow-y-auto">
+        <div className="fixed inset-0 bg-slate-900/80 z-[70] flex items-center justify-center p-2 sm:p-4 no-print overflow-y-auto">
           <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
             <div className="bg-slate-50 px-8 py-5 border-b border-slate-200 flex justify-between items-center">
               <div>
@@ -418,22 +418,20 @@ const InventoryManager: React.FC<Props> = ({ products, transactions, activeCompa
             </div>
             <form onSubmit={handleSubmit} className="p-6 sm:p-8 space-y-6">
               <div>
-                <label className="block text-[10px] font-black text-slate-500 uppercase mb-2 tracking-widest">Select Product</label>
-                <select
+                <SearchableSelect
+                  label="Select Product"
                   required
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 text-xs shadow-inner uppercase font-bold"
+                  placeholder="Search product by name or SKU..."
+                  options={products.map(p => ({ id: p.id, name: p.name, subtext: `SKU: ${p.sku} | CURRENT STOCK: ${p.stock}` }))}
                   value={formData.productId}
-                  onChange={e => setFormData({ ...formData, productId: e.target.value })}
-                >
-                  <option value="">Choose product...</option>
-                  {products.map(p => <option key={p.id} value={p.id}>{p.name} (SKU: {p.sku})</option>)}
-                </select>
+                  onChange={val => setFormData(prev => ({ ...prev, productId: val }))}
+                />
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-[10px] font-black text-slate-500 uppercase mb-2 tracking-widest">Supplier Name</label>
                   <input required type="text" placeholder="Who supplied this?" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs focus:ring-2 focus:ring-blue-500 outline-none"
-                    value={formData.supplierName} onChange={e => setFormData({ ...formData, supplierName: e.target.value })} />
+                    value={formData.supplierName} onChange={e => setFormData(prev => ({ ...prev, supplierName: e.target.value }))} />
                 </div>
                 <div>
                   <label className="block text-[10px] font-black text-slate-500 uppercase mb-2 tracking-widest">Invoice Number</label>
@@ -443,34 +441,34 @@ const InventoryManager: React.FC<Props> = ({ products, transactions, activeCompa
                 <div>
                   <label className="block text-[10px] font-black text-slate-500 uppercase mb-2 tracking-widest">Supplier GST Number</label>
                   <input type="text" placeholder="GST/PAN ID (optional)" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs focus:ring-2 focus:ring-blue-500 outline-none"
-                    value={formData.entityGstNumber} onChange={e => setFormData({ ...formData, entityGstNumber: e.target.value })} />
+                    value={formData.entityGstNumber} onChange={e => setFormData(prev => ({ ...prev, entityGstNumber: e.target.value }))} />
                 </div>
               </div>
               <div>
                 <label className="block text-[10px] font-black text-slate-500 uppercase mb-2 tracking-widest">Purchase Date</label>
                 <input required type="date" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs focus:ring-2 focus:ring-blue-500 outline-none"
-                  value={formData.date} onChange={e => setFormData({ ...formData, date: e.target.value })} />
+                  value={formData.date} onChange={e => setFormData(prev => ({ ...prev, date: e.target.value }))} />
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
                 <div>
                   <label className="block text-[10px] font-black text-slate-500 uppercase mb-2 tracking-widest">Quantity</label>
                   <input required type="number" placeholder="0" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs outline-none"
-                    value={formData.quantity} onChange={e => setFormData({ ...formData, quantity: e.target.value === '' ? '' : Number(e.target.value) })} />
+                    value={formData.quantity} onChange={e => setFormData(prev => ({ ...prev, quantity: e.target.value === '' ? '' : Number(e.target.value) }))} />
                 </div>
                 <div>
                   <label className="block text-[10px] font-black text-slate-500 uppercase mb-2 tracking-widest">Unit Cost</label>
                   <input required type="number" placeholder="0.00" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs outline-none"
-                    value={formData.unitCost} onChange={e => setFormData({ ...formData, unitCost: e.target.value === '' ? '' : Number(e.target.value) })} />
+                    value={formData.unitCost} onChange={e => setFormData(prev => ({ ...prev, unitCost: e.target.value === '' ? '' : Number(e.target.value) }))} />
                 </div>
                 <div>
                   <label className="block text-[10px] font-black text-slate-500 uppercase mb-2 tracking-widest">CGST (%)</label>
                   <input required type="number" placeholder="0" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs outline-none"
-                    value={formData.cgstRate} onChange={e => setFormData({ ...formData, cgstRate: e.target.value === '' ? '' : Number(e.target.value) })} />
+                    value={formData.cgstRate} onChange={e => setFormData(prev => ({ ...prev, cgstRate: e.target.value === '' ? '' : Number(e.target.value) }))} />
                 </div>
                 <div>
                   <label className="block text-[10px] font-black text-slate-500 uppercase mb-2 tracking-widest">SGST (%)</label>
                   <input required type="number" placeholder="0" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs outline-none"
-                    value={formData.sgstRate} onChange={e => setFormData({ ...formData, sgstRate: e.target.value === '' ? '' : Number(e.target.value) })} />
+                    value={formData.sgstRate} onChange={e => setFormData(prev => ({ ...prev, sgstRate: e.target.value === '' ? '' : Number(e.target.value) }))} />
                 </div>
               </div>
               <div className="pt-6 border-t border-slate-100 flex flex-col sm:flex-row justify-between items-center gap-4">

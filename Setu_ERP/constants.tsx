@@ -1,4 +1,3 @@
-
 import React from 'react';
 
 export const COLORS = {
@@ -10,13 +9,13 @@ export const COLORS = {
 };
 
 export const NAVIGATION = [
-  { id: 'dashboard', label: 'Dashboard', icon: 'fa-chart-pie' },
-  { id: 'companies', label: 'My Companies', icon: 'fa-building' },
-  { id: 'inventory', label: 'Stock-In (Purchase)', icon: 'fa-truck-loading' },
-  { id: 'sales', label: 'Stock-Out (Sales)', icon: 'fa-cash-register' },
-  { id: 'products', label: 'Catalog', icon: 'fa-box' },
-  { id: 'customers', label: 'Customers', icon: 'fa-users' },
-  { id: 'analytics', label: 'Reports', icon: 'fa-chart-line' },
-  { id: 'users', label: 'Access Control', icon: 'fa-user-shield' },
+  { id: 'dashboard', label: 'Dashboard Overview', icon: 'fa-th-large' },
+  { id: 'companies', label: 'Business Registry', icon: 'fa-building' },
+  { id: 'inventory', label: 'Inventory & Stock', icon: 'fa-truck-loading' },
+  { id: 'sales', label: 'Sales & Invoicing', icon: 'fa-cash-register' },
+  { id: 'products', label: 'Product Catalog', icon: 'fa-box-open' },
+  { id: 'customers', label: 'CRM & Clients', icon: 'fa-users' },
+  { id: 'analytics', label: 'Analytics & Reports', icon: 'fa-chart-line' },
+  { id: 'users', label: 'User Management', icon: 'fa-user-shield' },
   { id: 'admin', label: 'Admin Panel', icon: 'fa-crown' },
 ];

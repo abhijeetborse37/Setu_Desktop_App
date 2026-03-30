@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { User } from '../types';
 import { authService } from '../services/api';
+import { validators } from '../utils';
 
 interface EditProfileProps {
   currentUser: User;
@@ -24,11 +25,15 @@ const EditProfile: React.FC<EditProfileProps> = ({ currentUser, onProfileUpdated
 
   const handleRequestOtp = async () => {
     setError('');
+    if (!validators.name(newName)) {
+      setError('Please provide a valid display name (min 2 characters).');
+      return;
+    }
     if (newPassword && newPassword !== confirmPassword) {
       setError('Passwords do not match.');
       return;
     }
-    if (newPassword && newPassword.length < 6) {
+    if (newPassword && !validators.password(newPassword)) {
       setError('Password must be at least 6 characters.');
       return;
     }

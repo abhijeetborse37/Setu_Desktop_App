@@ -27,10 +27,11 @@ namespace Setu.Api.Controllers
         {
             try
             {
+                var identifier = login.EmailOrUsername?.Trim();
                 var user = await _context.Users
                     .Include(u => u.Subscription)
                     .ThenInclude(s => s!.Plan)
-                    .FirstOrDefaultAsync(u => u.Email == login.Email);
+                    .FirstOrDefaultAsync(u => u.Email == identifier || (u.Username != null && u.Username == identifier));
 
                 if (user == null || !BCrypt.Net.BCrypt.Verify(login.Password, user.PasswordHash))
                 {
@@ -96,6 +97,9 @@ namespace Setu.Api.Controllers
             if (await _context.Users.AnyAsync(u => u.Email == register.Email))
                 return BadRequest(new { message = "Email already exists" });
 
+            if (!string.IsNullOrEmpty(register.Username) && await _context.Users.AnyAsync(u => u.Username == register.Username))
+                return BadRequest(new { message = "Username already exists" });
+
             var userRole = UserRole.Customer;
             if (!string.IsNullOrEmpty(register.Role) && Enum.TryParse<UserRole>(register.Role, out var parsedRole))
                 userRole = parsedRole;
@@ -105,6 +109,7 @@ namespace Setu.Api.Controllers
                 Id = Guid.NewGuid(),
                 Name = register.Name,
                 Email = register.Email,
+                Username = string.IsNullOrWhiteSpace(register.Username) ? null : register.Username.Trim(),
                 PasswordHash = BCrypt.Net.BCrypt.HashPassword(register.Password),
                 ContactNo = register.ContactNo,
                 Role = userRole,
@@ -121,6 +126,7 @@ namespace Setu.Api.Controllers
                     user.Id,
                     user.Name,
                     user.Email,
+                    user.Username,
                     user.ContactNo,
                     user.Role,
                     OneTimePassword = register.Password // Plain text for admin to share once
@@ -204,8 +210,8 @@ namespace Setu.Api.Controllers
         }
     }
 
-    public record LoginDto(string Email, string Password);
-    public record RegisterDto(string Name, string Email, string Password, string? ContactNo, string? Role);
+    public record LoginDto(string EmailOrUsername, string Password);
+    public record RegisterDto(string Name, string Email, string? Username, string Password, string? ContactNo, string? Role);
     public record RequestOtpDto(string? Email, string? ContactNo);
     public record UpdateProfileDto(string? Email, string? ContactNo, string? NewName, string? NewPassword, string SimulatedOtp, string ProvidedOtp);
     public record SetTabsDto(string? AllowedTabsPattern);

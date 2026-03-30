@@ -2,6 +2,7 @@
 import React, { useState, useMemo, useRef } from 'react';
 import { Product, CustomAttribute, User, Company } from '../types';
 import { productService } from '../services/api';
+import { validators } from '../utils';
 
 interface Props {
   products: Product[];
@@ -38,10 +39,10 @@ const ProductManager: React.FC<Props> = ({ products, onDataChange, activeCompany
 
   const validate = () => {
     const newErrors: Record<string, string> = {};
-    if (!newProduct.name || newProduct.name.trim().length < 2) newErrors.name = 'Please enter a product name.';
-    if (!newProduct.price || Number(newProduct.price) <= 0) newErrors.price = 'Please enter a valid price.';
-    if (!newProduct.sku || !/^[A-Z0-9\-_]{3,15}$/i.test(newProduct.sku)) newErrors.sku = 'Code must be 3-15 characters.';
-    if (!newProduct.supplier || newProduct.supplier.trim().length < 2) newErrors.supplier = 'Please enter a supplier name.';
+    if (!validators.name(newProduct.name, 2)) newErrors.name = 'Valid product name required (min 2 chars).';
+    if (!newProduct.price || Number(newProduct.price) <= 0) newErrors.price = 'Please enter a valid price greater than 0.';
+    if (!newProduct.sku || !/^[A-Z0-9\-_]{2,20}$/i.test(newProduct.sku)) newErrors.sku = 'SKU code must be 2-20 alphanumeric characters.';
+    if (!validators.name(newProduct.supplier, 2)) newErrors.supplier = 'Valid supplier name required.';
 
     // HSN Validation
     const hsn = newProduct.hsnCode?.trim() || '';
@@ -191,18 +192,12 @@ const ProductManager: React.FC<Props> = ({ products, onDataChange, activeCompany
       {/* Catalog Header with Context */}
       <div className="flex flex-col md:flex-row md:items-end justify-between border-b border-slate-200 pb-6 gap-4">
         <div>
-          <div>
-            <h2 className="text-xl font-bold text-slate-800 tracking-tight">Product Catalog</h2>
-            <p className="text-xs text-slate-500">Add your products to the catalog</p>
-          </div>
-          {/* <div className="flex items-center mt-2 group cursor-help">
-            <span className="text-[10px] font-black text-blue-600 bg-blue-50 px-2 py-1 rounded-md uppercase tracking-widest mr-3">Current Company:</span>
-            <span className="text-xs font-bold text-slate-500 uppercase">{activeCompanyId ? `ID: ${activeCompanyId.substring(0, 8)}...` : 'NONE SELECTED'}</span>
-          </div> */}
+          <h2 className="text-3xl font-black text-slate-900 tracking-tight mb-1">Items & Services Catalog</h2>
+          <p className="text-sm text-slate-500 font-medium">List your products and services to manage stock and billing</p>
         </div>
-        <div className="bg-slate-50 px-4 py-3 rounded-2xl border border-slate-100 flex items-center justify-between min-w-[200px]">
-          <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none">Total Items</div>
-          <div className="text-xl font-black text-slate-900 leading-none">{products.length}</div>
+        <div className="bg-white px-6 py-4 rounded-3xl border border-slate-200/60 shadow-sm flex items-center justify-between min-w-[220px] ring-4 ring-slate-100/50">
+          <div className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] leading-none">Catalog Count</div>
+          <div className="text-2xl font-black text-blue-600 leading-none">{products.length}</div>
         </div>
       </div>
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -218,25 +213,25 @@ const ProductManager: React.FC<Props> = ({ products, onDataChange, activeCompany
         </div>
         <button
           onClick={() => { resetForm(); setShowAddForm(true); }}
-          className="w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white px-8 py-3.5 rounded-2xl font-bold shadow-lg shadow-blue-500/20 transition-all flex items-center justify-center uppercase text-[10px] tracking-widest"
+          className="w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white px-10 py-4 rounded-2xl font-black shadow-xl shadow-blue-500/30 transition-all flex items-center justify-center uppercase text-[10px] tracking-[0.2em] active:scale-95"
         >
-          <i className="fas fa-plus mr-2"></i> Add New Product
+          <i className="fas fa-plus mr-3 text-sm"></i> Add New Item to Catalog
         </button>
       </div>
 
       <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-left text-xs">
-            <thead className="bg-slate-50 border-b border-slate-200">
+        <div className="overflow-x-auto custom-scrollbar">
+          <table className="min-w-full text-left">
+            <thead className="bg-slate-50 sticky top-0 z-10 border-b border-slate-200/60">
               <tr>
-                <th className="p-3 uppercase tracking-widest text-slate-500">Name</th>
-                <th className="p-3 uppercase tracking-widest text-slate-500">SKU</th>
-                <th className="p-3 uppercase tracking-widest text-slate-500">Category</th>
-                <th className="p-3 uppercase tracking-widest text-slate-500">Price</th>
-                <th className="p-3 uppercase tracking-widest text-slate-500">Stock</th>
-                <th className="p-3 uppercase tracking-widest text-slate-500">Unit/Pack</th>
-                <th className="p-3 uppercase tracking-widest text-slate-500">HSN</th>
-                <th className="p-3 uppercase tracking-widest text-slate-500 text-right">Actions</th>
+                <th className="px-6 py-5 uppercase tracking-[0.2em] text-slate-400 font-black text-[10px]">Name</th>
+                <th className="px-6 py-5 uppercase tracking-[0.2em] text-slate-400 font-black text-[10px]">SKU</th>
+                <th className="px-6 py-5 uppercase tracking-[0.2em] text-slate-400 font-black text-[10px]">Category</th>
+                <th className="px-6 py-5 uppercase tracking-[0.2em] text-slate-400 font-black text-[10px]">Price</th>
+                <th className="px-6 py-5 uppercase tracking-[0.2em] text-slate-400 font-black text-[10px]">Stock</th>
+                <th className="px-6 py-5 uppercase tracking-[0.2em] text-slate-400 font-black text-[10px]">Pack</th>
+                <th className="px-6 py-5 uppercase tracking-[0.2em] text-slate-400 font-black text-[10px]">HSN</th>
+                <th className="px-6 py-5 uppercase tracking-[0.2em] text-slate-400 font-black text-[10px] text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -254,8 +249,8 @@ const ProductManager: React.FC<Props> = ({ products, onDataChange, activeCompany
 
                 return (
                   <React.Fragment key={id || Math.random()}>
-                    <tr className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
-                      <td className="p-3 font-black uppercase tracking-tight text-slate-800">{name}</td>
+                    <tr className="border-b border-slate-100 hover:bg-blue-50/30 transition-all even:bg-slate-50/30 group">
+                      <td className="px-6 py-4 font-black uppercase tracking-tight text-slate-900 text-sm">{name}</td>
                       <td className="p-3 font-mono text-slate-500 uppercase">{sku}</td>
                       <td className="p-3 text-slate-500">{category}</td>
                       <td className="p-3 text-slate-700 font-black">{currencySymbol}{price.toLocaleString()}</td>
@@ -369,7 +364,7 @@ const ProductManager: React.FC<Props> = ({ products, onDataChange, activeCompany
       )}
 
       {showAddForm && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[80] flex items-center justify-center p-2 sm:p-4 overflow-y-auto custom-scrollbar">
+        <div className="fixed inset-0 bg-slate-900/80 z-[80] flex items-center justify-center p-2 sm:p-4 overflow-y-auto custom-scrollbar">
           <div className="bg-white rounded-[2rem] md:rounded-[3rem] w-full max-w-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 my-4 md:my-8 flex flex-col max-h-[90vh]">
             <div className="bg-slate-50 px-6 py-6 md:px-8 md:py-6 border-b border-slate-200 flex justify-between items-center flex-shrink-0">
               <div>
@@ -394,10 +389,11 @@ const ProductManager: React.FC<Props> = ({ products, onDataChange, activeCompany
                   <input
                     required
                     type="text"
+                    autoFocus
                     placeholder="What are you selling?"
-                    className={`w-full bg-slate-50 border-2 ${errors.name ? 'border-red-500 ring-4 ring-red-50 ring-opacity-50' : 'border-slate-100'} rounded-2xl px-5 py-3.5 text-sm focus:border-blue-500 focus:bg-white outline-none transition-all font-medium`}
+                    className={`w-full bg-white border-2 ${errors.name ? 'border-red-500 ring-4 ring-red-50 ring-opacity-50' : 'border-slate-200'} rounded-2xl px-5 py-3.5 text-sm focus:border-blue-500 focus:bg-white outline-none transition-all font-medium shadow-sm`}
                     value={newProduct.name}
-                    onChange={e => setNewProduct({ ...newProduct, name: e.target.value })}
+                    onChange={e => setNewProduct(prev => ({ ...prev, name: e.target.value }))}
                   />
                   {errors.name && <p className="text-[10px] text-red-500 mt-2 font-bold ml-1">{errors.name}</p>}
                 </div>
@@ -411,9 +407,9 @@ const ProductManager: React.FC<Props> = ({ products, onDataChange, activeCompany
                       step="0.01"
                       min="0.01"
                       placeholder="0.00"
-                      className={`w-full bg-slate-50 border-2 ${errors.price ? 'border-red-500' : 'border-slate-100'} rounded-2xl px-5 py-3.5 font-black text-sm focus:border-blue-500 focus:bg-white outline-none transition-all`}
+                      className={`w-full bg-white border-2 ${errors.price ? 'border-red-500' : 'border-slate-200'} rounded-2xl px-5 py-3.5 font-black text-sm focus:border-blue-500 focus:bg-white outline-none transition-all shadow-sm`}
                       value={newProduct.price}
-                      onChange={e => setNewProduct({ ...newProduct, price: e.target.value })}
+                      onChange={e => setNewProduct(prev => ({ ...prev, price: e.target.value }))}
                     />
                     {errors.price && <p className="text-[10px] text-red-500 mt-2 font-bold ml-1">{errors.price}</p>}
                   </div>
@@ -423,9 +419,9 @@ const ProductManager: React.FC<Props> = ({ products, onDataChange, activeCompany
                       required
                       type="text"
                       placeholder="A-101"
-                      className={`w-full bg-slate-50 border-2 ${errors.sku ? 'border-red-500' : 'border-slate-100'} rounded-2xl px-5 py-3.5 text-sm font-mono focus:border-blue-500 focus:bg-white outline-none uppercase font-bold transition-all`}
+                      className={`w-full bg-white border-2 ${errors.sku ? 'border-red-500' : 'border-slate-200'} rounded-2xl px-5 py-3.5 text-sm font-mono focus:border-blue-500 focus:bg-white outline-none uppercase font-bold transition-all shadow-sm`}
                       value={newProduct.sku || ''}
-                      onChange={e => setNewProduct({ ...newProduct, sku: e.target.value.toUpperCase() })}
+                      onChange={e => setNewProduct(prev => ({ ...prev, sku: e.target.value.toUpperCase() }))}
                     />
                     {errors.sku && <p className="text-[10px] text-red-500 mt-2 font-bold ml-1">{errors.sku}</p>}
                   </div>
@@ -438,9 +434,9 @@ const ProductManager: React.FC<Props> = ({ products, onDataChange, activeCompany
                   <input
                     type="text"
                     placeholder="e.g. Electronics, Clothing"
-                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-3.5 text-sm focus:border-blue-500 focus:bg-white outline-none transition-all font-medium"
+                    className="w-full bg-white border-2 border-slate-200 rounded-2xl px-5 py-3.5 text-sm focus:border-blue-500 focus:bg-white outline-none transition-all font-medium shadow-sm"
                     value={newProduct.category || ''}
-                    onChange={e => setNewProduct({ ...newProduct, category: e.target.value })}
+                    onChange={e => setNewProduct(prev => ({ ...prev, category: e.target.value }))}
                   />
                 </div>
                 <div>
@@ -448,9 +444,9 @@ const ProductManager: React.FC<Props> = ({ products, onDataChange, activeCompany
                   <input
                     type="text"
                     placeholder="e.g. ABC Suppliers Ltd"
-                    className={`w-full bg-slate-50 border-2 ${errors.supplier ? 'border-red-500 ring-4 ring-red-50 ring-opacity-50' : 'border-slate-100'} rounded-2xl px-5 py-3.5 text-sm focus:border-blue-500 focus:bg-white outline-none transition-all font-medium`}
+                    className={`w-full bg-white border-2 ${errors.supplier ? 'border-red-500 ring-4 ring-red-50 ring-opacity-50' : 'border-slate-200'} rounded-2xl px-5 py-3.5 text-sm focus:border-blue-500 focus:bg-white outline-none transition-all font-medium shadow-sm`}
                     value={newProduct.supplier || ''}
-                    onChange={e => setNewProduct({ ...newProduct, supplier: e.target.value })}
+                    onChange={e => setNewProduct(prev => ({ ...prev, supplier: e.target.value }))}
                   />
                   {errors.supplier && <p className="text-[10px] text-red-500 mt-2 font-bold ml-1">{errors.supplier}</p>}
                 </div>
@@ -460,9 +456,9 @@ const ProductManager: React.FC<Props> = ({ products, onDataChange, activeCompany
                     type="number"
                     min="1"
                     placeholder="Auto (1)"
-                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-3.5 text-sm focus:border-blue-500 focus:bg-white outline-none transition-all font-black"
+                    className="w-full bg-white border-2 border-slate-200 rounded-2xl px-5 py-3.5 text-sm focus:border-blue-500 focus:bg-white outline-none transition-all font-black shadow-sm"
                     value={newProduct.unitPerPack}
-                    onChange={e => setNewProduct({ ...newProduct, unitPerPack: e.target.value === '' ? '' : Number(e.target.value) })}
+                    onChange={e => setNewProduct(prev => ({ ...prev, unitPerPack: e.target.value === '' ? '' : Number(e.target.value) }))}
                   />
                 </div>
                 <div>
@@ -471,7 +467,7 @@ const ProductManager: React.FC<Props> = ({ products, onDataChange, activeCompany
                     type="text"
                     maxLength={8}
                     placeholder="4, 6, or 8 digits"
-                    className={`w-full bg-slate-50 border-2 ${errors.hsnCode ? 'border-red-500 ring-4 ring-red-50 ring-opacity-50' : 'border-slate-100'} rounded-2xl px-5 py-3.5 text-sm focus:border-blue-500 focus:bg-white outline-none transition-all font-bold`}
+                    className={`w-full bg-white border-2 ${errors.hsnCode ? 'border-red-500 ring-4 ring-red-50 ring-opacity-50' : 'border-slate-200'} rounded-2xl px-5 py-3.5 text-sm focus:border-blue-500 focus:bg-white outline-none transition-all font-bold shadow-sm`}
                     value={newProduct.hsnCode}
                     onChange={e => {
                       const val = e.target.value.replace(/[^0-9]/g, '');
@@ -492,9 +488,9 @@ const ProductManager: React.FC<Props> = ({ products, onDataChange, activeCompany
                 <textarea
                   rows={4}
                   placeholder="Describe your product for customers..."
-                  className="w-full bg-slate-50 border-2 border-slate-100 rounded-[2rem] px-6 py-5 text-sm focus:border-blue-500 focus:bg-white outline-none resize-none transition-all font-medium"
+                  className="w-full bg-white border-2 border-slate-200 rounded-[2rem] px-6 py-5 text-sm focus:border-blue-500 focus:bg-white outline-none resize-none transition-all font-medium shadow-sm"
                   value={newProduct.description || ''}
-                  onChange={e => setNewProduct({ ...newProduct, description: e.target.value })}
+                  onChange={e => setNewProduct(prev => ({ ...prev, description: e.target.value }))}
                 />
               </div>
 
@@ -502,7 +498,7 @@ const ProductManager: React.FC<Props> = ({ products, onDataChange, activeCompany
                 <button type="button" onClick={closeForm} className="w-full md:w-auto px-6 md:px-8 py-4 font-black text-slate-400 hover:text-slate-600 text-[10px] uppercase tracking-[0.2em] transition-colors rounded-2xl hover:bg-slate-50">Discard</button>
                 <button type="submit" disabled={isBusy} className="w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white px-8 md:px-12 py-4 rounded-2xl font-black shadow-xl shadow-blue-500/20 text-[10px] uppercase tracking-[0.2em] transition-all transform active:scale-95 flex items-center justify-center">
                   {isBusy ? <i className="fas fa-circle-notch fa-spin mr-2"></i> : null}
-                  {editingProduct ? 'Save Changes' : 'Add to Catalog'}
+                  {editingProduct ? 'Save Item Updates' : 'Complete & Save Item'}
                 </button>
               </div>
             </form>

@@ -1,7 +1,24 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { adminService } from '../services/api';
 import { SubscriptionPlan, UserSubscription, BusinessType, Company } from '../types';
-import { formatDisplayDate } from '../utils';
+import { formatDisplayDate, validators } from '../utils';
+
+// Map frontend numeric enum to backend string enum names (API uses JsonStringEnumConverter)
+const BUSINESS_TYPE_TO_STRING: Record<number, string> = {
+  [BusinessType.PRIVATE]: 'PrivateLimited',
+  [BusinessType.PUBLIC]: 'PublicLimited',
+  [BusinessType.FIRM]: 'Proprietorship',
+  [BusinessType.PARTNERSHIP]: 'Partnership',
+  [BusinessType.NGO]: 'Ngo'
+};
+
+const STRING_TO_BUSINESS_TYPE: Record<string, number> = {
+  'PrivateLimited': BusinessType.PRIVATE,
+  'PublicLimited': BusinessType.PUBLIC,
+  'Proprietorship': BusinessType.FIRM,
+  'Partnership': BusinessType.PARTNERSHIP,
+  'Ngo': BusinessType.NGO
+};
 
 // IFSC Code database (sample Indian banks)
 const IFSC_DATABASE: { [key: string]: string } = {
@@ -18,8 +35,7 @@ const IFSC_DATABASE: { [key: string]: string } = {
 // Validation functions
 const validateIFSC = (ifsc: string): { valid: boolean; message: string } => {
   if (!ifsc) return { valid: false, message: 'IFSC Code is required' };
-  const ifscRegex = /^[A-Z]{4}0[A-Z0-9]{6}$/;
-  if (!ifscRegex.test(ifsc)) {
+  if (!validators.ifsc(ifsc)) {
     return { valid: false, message: 'Invalid IFSC format. Format: ABCD0000123' };
   }
   return { valid: true, message: 'Valid IFSC' };
@@ -27,7 +43,7 @@ const validateIFSC = (ifsc: string): { valid: boolean; message: string } => {
 
 const validateAccountNumber = (accountNo: string): { valid: boolean; message: string } => {
   if (!accountNo) return { valid: false, message: 'Account Number is required' };
-  if (!/^[0-9]{9,18}$/.test(accountNo.replace(/\s/g, ''))) {
+  if (!validators.bankAccount(accountNo)) {
     return { valid: false, message: 'Account number must have 9-18 digits' };
   }
   return { valid: true, message: 'Valid' };
@@ -35,12 +51,32 @@ const validateAccountNumber = (accountNo: string): { valid: boolean; message: st
 
 const validateBankName = (bankName: string): { valid: boolean; message: string } => {
   if (!bankName) return { valid: false, message: 'Bank Name is required' };
-  if (bankName.length < 3) return { valid: false, message: 'Bank Name is too short' };
+  if (!validators.text(bankName, 3)) return { valid: false, message: 'Bank Name is too short' };
   return { valid: true, message: 'Valid' };
 };
 
 const getBranchNameFromIFSC = (ifsc: string): string => {
   return IFSC_DATABASE[ifsc] || 'Enter branch name manually';
+};
+
+const StatCard: React.FC<{ title: string; value: number | string; icon: string; color: string }> = ({ title, value, icon, color }) => {
+  const colors: any = {
+    blue: 'bg-blue-50 text-blue-600',
+    emerald: 'bg-emerald-50 text-emerald-600',
+    amber: 'bg-amber-50 text-amber-600',
+    purple: 'bg-purple-50 text-purple-600',
+  };
+  return (
+    <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm flex items-center gap-5">
+      <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-xl shadow-sm flex-shrink-0 ${colors[color] || colors.blue}`}>
+        <i className={`fas ${icon}`}></i>
+      </div>
+      <div>
+        <h4 className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">{title}</h4>
+        <p className="text-3xl font-black text-slate-900 tracking-tighter">{value}</p>
+      </div>
+    </div>
+  );
 };
 
 const AdminPanel: React.FC = () => {
@@ -121,21 +157,21 @@ const AdminPanel: React.FC = () => {
 
   const fetchData = async () => {
     setIsLoading(true);
-    
+
     // Fire requests independently so one failure doesn't stop others
     try {
       adminService.getStats()
         .then(res => setStats(res.data))
         .catch(err => console.error('Error fetching stats:', err));
-        
+
       adminService.getUsers()
         .then(res => setUsers(res.data))
         .catch(err => console.error('Error fetching users:', err));
-        
+
       adminService.getPendingSubscriptions()
         .then(res => setPendingSubs(res.data))
         .catch(err => console.error('Error fetching pending subs:', err));
-        
+
       adminService.getPlans()
         .then(res => setPlans(res.data))
         .catch(err => console.error('Error fetching plans:', err));
@@ -296,7 +332,7 @@ const AdminPanel: React.FC = () => {
     const payload = {
       userId: businessFormUser.id,
       ...businessFormData,
-      type: Number(businessFormData.type),
+      type: BUSINESS_TYPE_TO_STRING[Number(businessFormData.type)] || 'PrivateLimited',
       employees: Number(businessFormData.employees) || 0,
       revenue: Number(businessFormData.revenue) || 0,
       expenses: Number(businessFormData.expenses) || 0,
@@ -344,7 +380,9 @@ const AdminPanel: React.FC = () => {
       currency: company.currency,
       currencySymbol: company.currencySymbol,
       contact: company.contact,
-      type: company.type,
+      type: typeof company.type === 'string'
+        ? (STRING_TO_BUSINESS_TYPE[company.type as unknown as string] ?? BusinessType.PRIVATE)
+        : company.type,
       taxId: company.taxId,
       gstNumber: company.gstNumber || '',
       licenseNumber: company.licenseNumber,
@@ -380,17 +418,27 @@ const AdminPanel: React.FC = () => {
     setCompanyPage(1);
   }, [companyFilter.owner, companyFilter.name, companyFilter.taxId]);
 
-  const filteredCompanies = companies.filter((company) => {
-    const ownerName = users.find((u) => u.id === company.userId)?.name?.toLowerCase() || '';
-    return (
-      (!companyFilter.owner || ownerName.includes(companyFilter.owner.toLowerCase())) &&
-      (!companyFilter.name || company.name.toLowerCase().includes(companyFilter.name.toLowerCase())) &&
-      (!companyFilter.taxId || company.taxId.toLowerCase().includes(companyFilter.taxId.toLowerCase()))
-    );
-  });
+  const customerUsers = useMemo(() => 
+    users.filter(u => u.role === 'Customer' || u.role === 1),
+    [users]
+  );
+
+  const filteredCompanies = useMemo(() => {
+    return companies.filter((company) => {
+      const ownerName = users.find((u) => u.id === company.userId)?.name?.toLowerCase() || '';
+      return (
+        (!companyFilter.owner || ownerName.includes(companyFilter.owner.toLowerCase())) &&
+        (!companyFilter.name || company.name.toLowerCase().includes(companyFilter.name.toLowerCase())) &&
+        (!companyFilter.taxId || company.taxId.toLowerCase().includes(companyFilter.taxId.toLowerCase()))
+      );
+    });
+  }, [companies, users, companyFilter.owner, companyFilter.name, companyFilter.taxId]);
 
   const totalCompanyPages = Math.max(1, Math.ceil(filteredCompanies.length / companyPageSize));
-  const paginatedCompanies = filteredCompanies.slice((companyPage - 1) * companyPageSize, companyPage * companyPageSize);
+  const paginatedCompanies = useMemo(() => 
+    filteredCompanies.slice((companyPage - 1) * companyPageSize, companyPage * companyPageSize),
+    [filteredCompanies, companyPage, companyPageSize]
+  );
 
   const handleSavePlan = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -404,10 +452,10 @@ const AdminPanel: React.FC = () => {
     try {
       let featuresArray: string[] = [];
       try {
-        featuresArray = typeof planFormData.featuresJson === 'string' 
-          ? JSON.parse(planFormData.featuresJson) 
+        featuresArray = typeof planFormData.featuresJson === 'string'
+          ? JSON.parse(planFormData.featuresJson)
           : planFormData.featuresJson;
-      } catch {}
+      } catch { }
 
       const payload = {
         ...planFormData,
@@ -424,11 +472,11 @@ const AdminPanel: React.FC = () => {
         await adminService.createPlan(payload);
         setActiveSubTab('plans'); // Switch to plans tab after creating
       }
-      
+
       setShowPlanForm(false);
       setEditingPlanId(null);
       setPlanFormData({
-        name: '', description: '', price: 0, validity: '', maxCompanies: 1, 
+        name: '', description: '', price: 0, validity: '', maxCompanies: 1,
         maxProducts: 10, maxUsers: 5, featuresJson: '[]', status: 'Active'
       });
       setPlanFormError('');
@@ -443,7 +491,7 @@ const AdminPanel: React.FC = () => {
   const handleEditPlan = (plan: SubscriptionPlan) => {
     setEditingPlanId(plan.id);
     let features: string[] = [];
-    try { features = JSON.parse(plan.featuresJson || '[]'); } catch {}
+    try { features = JSON.parse(plan.featuresJson || '[]'); } catch { }
     setPlanFormData({
       name: plan.name,
       description: plan.description,
@@ -496,17 +544,16 @@ const AdminPanel: React.FC = () => {
     setTimeout(() => { printWin.print(); printWin.close(); }, 300);
   };
 
-  const customerUsers = users.filter(u => u.role === 'Customer' || u.role === 1);
 
   // Helper function to get plan status
   const getPlanStatus = (subscription: any) => {
     if (!subscription) return { status: 'none', label: 'No Plan', color: 'slate', daysLeft: 0 };
-    
+
     if (subscription.status === 'Active' && subscription.isActive) {
       const endDate = new Date(subscription.endDate);
       const today = new Date();
       const daysLeft = Math.ceil((endDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-      
+
       if (daysLeft <= 0) {
         return { status: 'expired', label: 'Expired', color: 'red', daysLeft };
       } else if (daysLeft <= 7) {
@@ -542,9 +589,8 @@ const AdminPanel: React.FC = () => {
             <button
               key={tab}
               onClick={() => setActiveSubTab(tab)}
-              className={`px-3 sm:px-4 py-2 rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all text-center ${
-                activeSubTab === tab ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-400 hover:text-slate-600'
-              }`}
+              className={`px-3 sm:px-4 py-2 rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all text-center ${activeSubTab === tab ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-400 hover:text-slate-600'
+                }`}
             >
               {tab === 'dashboard' ? 'Overview' : tab === 'businesses' ? 'Businesses' : tab}
             </button>
@@ -594,64 +640,63 @@ const AdminPanel: React.FC = () => {
                   {customerUsers.map((u) => {
                     const planStatus = getPlanStatus(u.subscription);
                     return (
-                    <tr key={u.id} className={`hover:bg-slate-50/50 transition-colors ${planStatus.status === 'expired' ? 'bg-red-50/30' : planStatus.status === 'expiring-soon' ? 'bg-amber-50/20' : ''}`}>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-emerald-500 flex items-center justify-center font-black text-white text-xs flex-shrink-0">
-                            {u.name?.substring(0, 2).toUpperCase()}
+                      <tr key={u.id} className={`hover:bg-slate-50/50 transition-colors ${planStatus.status === 'expired' ? 'bg-red-50/30' : planStatus.status === 'expiring-soon' ? 'bg-amber-50/20' : ''}`}>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-emerald-500 flex items-center justify-center font-black text-white text-xs flex-shrink-0">
+                              {u.name?.substring(0, 2).toUpperCase()}
+                            </div>
+                            <div>
+                              <p className="font-bold text-slate-800 text-sm">{u.name}</p>
+                              <p className="text-[10px] text-slate-400">{u.email}</p>
+                            </div>
                           </div>
-                          <div>
-                            <p className="font-bold text-slate-800 text-sm">{u.name}</p>
-                            <p className="text-[10px] text-slate-400">{u.email}</p>
+                        </td>
+                        <td className="px-6 py-4 hidden md:table-cell">
+                          <p className="text-xs text-slate-600">{u.contactNo || '—'}</p>
+                        </td>
+                        <td className="px-6 py-4">
+                          <p className="text-xs font-bold text-slate-700">{u.subscription?.planName || <span className="text-slate-300">No Plan</span>}</p>
+                        </td>
+                        <td className="px-6 py-4">
+                          <p className="text-[10px] font-bold text-slate-500">{u.subscription?.startDate ? formatDisplayDate(u.subscription.startDate) : '—'}</p>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className={`text-[9px] font-black px-2.5 py-1 rounded-lg uppercase tracking-widest ${planStatus.status === 'expired' ? 'bg-red-50 text-red-600'
+                              : planStatus.status === 'expiring-soon' ? 'bg-amber-50 text-amber-600'
+                                : planStatus.status === 'active' ? 'bg-emerald-50 text-emerald-600'
+                                  : planStatus.status === 'pending' ? 'bg-amber-50 text-amber-600'
+                                    : 'bg-slate-100 text-slate-400'
+                            }`}>
+                            {planStatus.label}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 hidden lg:table-cell">
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">
+                            {u.subscription?.endDate ? formatDisplayDate(u.subscription.endDate) : '—'}
+                          </p>
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <div className="flex justify-end gap-1.5">
+                            <button
+                              onClick={() => { setInvoiceUser(u); }}
+                              disabled={!u.subscription}
+                              className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-all text-xs disabled:opacity-30 disabled:cursor-not-allowed"
+                              title="Generate Invoice"
+                            >
+                              <i className="fas fa-file-invoice"></i>
+                            </button>
+                            <button
+                              onClick={() => handleOpenSubForm(u)}
+                              className="p-2 bg-emerald-50 text-emerald-600 rounded-lg hover:bg-emerald-100 transition-all text-xs"
+                              title="Assign/Renew Subscription"
+                            >
+                              <i className="fas fa-sync-alt"></i>
+                            </button>
                           </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 hidden md:table-cell">
-                        <p className="text-xs text-slate-600">{u.contactNo || '—'}</p>
-                      </td>
-                      <td className="px-6 py-4">
-                        <p className="text-xs font-bold text-slate-700">{u.subscription?.planName || <span className="text-slate-300">No Plan</span>}</p>
-                      </td>
-                      <td className="px-6 py-4">
-                        <p className="text-[10px] font-bold text-slate-500">{u.subscription?.startDate ? formatDisplayDate(u.subscription.startDate) : '—'}</p>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className={`text-[9px] font-black px-2.5 py-1 rounded-lg uppercase tracking-widest ${
-                          planStatus.status === 'expired' ? 'bg-red-50 text-red-600'
-                          : planStatus.status === 'expiring-soon' ? 'bg-amber-50 text-amber-600'
-                          : planStatus.status === 'active' ? 'bg-emerald-50 text-emerald-600'
-                          : planStatus.status === 'pending' ? 'bg-amber-50 text-amber-600'
-                          : 'bg-slate-100 text-slate-400'
-                        }`}>
-                          {planStatus.label}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 hidden lg:table-cell">
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">
-                          {u.subscription?.endDate ? formatDisplayDate(u.subscription.endDate) : '—'}
-                        </p>
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <div className="flex justify-end gap-1.5">
-                          <button
-                            onClick={() => { setInvoiceUser(u); }}
-                            disabled={!u.subscription}
-                            className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-all text-xs disabled:opacity-30 disabled:cursor-not-allowed"
-                            title="Generate Invoice"
-                          >
-                            <i className="fas fa-file-invoice"></i>
-                          </button>
-                          <button
-                            onClick={() => handleOpenSubForm(u)}
-                            className="p-2 bg-emerald-50 text-emerald-600 rounded-lg hover:bg-emerald-100 transition-all text-xs"
-                            title="Assign/Renew Subscription"
-                          >
-                            <i className="fas fa-sync-alt"></i>
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
+                        </td>
+                      </tr>
+                    );
                   })}
                   {customerUsers.length === 0 && (
                     <tr><td colSpan={6} className="py-12 text-center text-slate-400 font-bold uppercase text-[10px] tracking-widest">No customers yet</td></tr>
@@ -722,13 +767,13 @@ const AdminPanel: React.FC = () => {
                 <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Manage subscription tiers and features</p>
               </div>
               <button
-                onClick={() => { 
-                  setEditingPlanId(null); 
+                onClick={() => {
+                  setEditingPlanId(null);
                   setPlanFormData({
-                    name: '', description: '', price: 0, validity: '', maxCompanies: 1, 
+                    name: '', description: '', price: 0, validity: '', maxCompanies: 1,
                     maxProducts: 10, maxUsers: 5, featuresJson: '[]', status: 'Active'
                   });
-                  setShowPlanForm(true); 
+                  setShowPlanForm(true);
                 }}
                 className="bg-blue-600 text-white px-6 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-blue-500/20 flex items-center gap-2"
               >
@@ -764,7 +809,7 @@ const AdminPanel: React.FC = () => {
                 </div>
                 {(() => {
                   let feats: string[] = [];
-                  try { feats = JSON.parse(p.featuresJson || '[]'); } catch {}
+                  try { feats = JSON.parse(p.featuresJson || '[]'); } catch { }
                   return feats.length > 0 ? (
                     <ul className="space-y-1.5 mb-6">
                       {feats.map((f, i) => (
@@ -857,7 +902,7 @@ const AdminPanel: React.FC = () => {
                     <th className="px-3 py-2">Business Name</th>
                     <th className="px-3 py-2">Customer</th>
                     <th className="px-3 py-2">Tax ID</th>
-                    <th className="px-3 py-2">Type</th>
+                    <th className="px-3 py-2">Entity Structure</th>
                     <th className="px-3 py-2">Contact</th>
                     <th className="px-3 py-2">Actions</th>
                   </tr>
@@ -870,7 +915,15 @@ const AdminPanel: React.FC = () => {
                   ) : (
                     paginatedCompanies.map((company) => {
                       const owner = users.find((u) => u.id === company.userId)?.name || 'Unknown';
-                      const typeText = (BusinessType as any)[company.type] || 'Unknown';
+                      const typeLabels: Record<string, string> = {
+                        'PrivateLimited': 'Private Limited',
+                        'PublicLimited': 'Public Limited',
+                        'Proprietorship': 'Proprietorship / Firm',
+                        'Partnership': 'Partnership',
+                        'Ngo': 'NGO'
+                      };
+                      const typeVal = String(company.type);
+                      const typeText = typeLabels[typeVal] || (BUSINESS_TYPE_TO_STRING[Number(typeVal)] ? typeLabels[BUSINESS_TYPE_TO_STRING[Number(typeVal)]] : typeVal || 'Unknown');
                       return (
                         <tr key={company.id} className="border-t border-slate-100 hover:bg-slate-50">
                           <td className="px-3 py-3 font-bold text-slate-800">{company.name}</td>
@@ -922,7 +975,7 @@ const AdminPanel: React.FC = () => {
 
       {/* Assign Subscription Modal */}
       {showSubForm && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[80] flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
+        <div className="fixed inset-0 bg-slate-900/80 z-[80] flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
           <div className="bg-white rounded-[2rem] w-full max-w-md shadow-2xl overflow-hidden animate-in zoom-in-95 my-8">
             <div className="h-1.5 bg-gradient-to-r from-blue-600 to-emerald-500"></div>
             <div className="p-4 sm:p-8">
@@ -930,8 +983,8 @@ const AdminPanel: React.FC = () => {
                 {renewalMode ? '↻ Renew/Upgrade Subscription' : 'Assign New Subscription'}
               </h3>
               <p className="text-xs text-slate-400 mb-6">
-                {renewalMode 
-                  ? 'Renew or upgrade the existing subscription plan for this customer' 
+                {renewalMode
+                  ? 'Renew or upgrade the existing subscription plan for this customer'
                   : 'Create a new subscription for a customer'}
               </p>
 
@@ -965,11 +1018,10 @@ const AdminPanel: React.FC = () => {
                       setRenewalMode(!renewalMode);
                       setSubFormError('');
                     }}
-                    className={`w-full py-2.5 rounded-xl font-black text-xs uppercase tracking-widest transition-colors ${
-                      renewalMode 
-                        ? 'bg-emerald-100 text-emerald-700 border border-emerald-300' 
+                    className={`w-full py-2.5 rounded-xl font-black text-xs uppercase tracking-widest transition-colors ${renewalMode
+                        ? 'bg-emerald-100 text-emerald-700 border border-emerald-300'
                         : 'bg-slate-100 text-slate-600 border border-slate-200'
-                    }`}
+                      }`}
                   >
                     {renewalMode ? '✓ Renew Mode Enabled' : '↻ Renew/Upgrade Current Plan'}
                   </button>
@@ -1015,9 +1067,9 @@ const AdminPanel: React.FC = () => {
                 )}
 
                 <div className="flex gap-3 pt-2">
-                  <button 
+                  <button
                     type="button"
-                    onClick={() => setShowSubForm(false)} 
+                    onClick={() => setShowSubForm(false)}
                     className="flex-1 py-3 text-slate-400 font-bold text-xs uppercase tracking-widest border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors"
                   >
                     Cancel
@@ -1038,7 +1090,7 @@ const AdminPanel: React.FC = () => {
 
       {/* Invoice Modal */}
       {invoiceUser && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[80] flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
+        <div className="fixed inset-0 bg-slate-900/80 z-[80] flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
           <div className="bg-white rounded-[2rem] w-full max-w-md sm:max-w-lg md:max-w-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 my-8">
             <div className="flex items-center justify-between p-6 border-b border-slate-100">
               <h3 className="font-black text-slate-800 uppercase tracking-tight text-lg">Subscription Invoice</h3>
@@ -1130,77 +1182,83 @@ const AdminPanel: React.FC = () => {
 
       {/* Register Business Modal */}
       {showBusinessForm && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[80] flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
-          <div className="bg-white rounded-[2rem] w-full max-w-md sm:max-w-lg md:max-w-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 my-8">
+        <div className="fixed inset-0 bg-slate-900/80 z-[100] flex items-start justify-center p-2 sm:p-4 overflow-y-auto backdrop-blur-sm scroll-smooth">
+          <div className="relative bg-white rounded-[2rem] w-full max-w-md sm:max-w-lg md:max-w-3xl shadow-2xl overflow-hidden my-auto pointer-events-auto ring-1 ring-white/50">
             <div className="h-1.5 bg-gradient-to-r from-emerald-600 to-blue-600"></div>
-            <div className="p-4 sm:p-8">
-              <h3 className="text-xl font-black text-slate-800 mb-1 uppercase tracking-tight">Register Business for Customer</h3>
-              <p className="text-xs text-slate-400 mb-6">Create a new business account and assign it to a customer</p>
+            <div className="p-4 sm:p-10">
+              <h1 className="text-3xl font-black text-slate-900 mb-1 uppercase tracking-tight">Register Business</h1>
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em] mb-10">Corporate Entity Registry & Compliance</p>
 
-              <div className="space-y-4 max-h-[60vh] overflow-y-auto">
-                {/* Customer Selection */}
-                <div>
-                  <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Select Customer</label>
+              <div className="space-y-6">
+                <div className="max-h-[60vh] overflow-y-auto pr-2 space-y-8 custom-scrollbar">
+                  {/* Customer Selection */}
+                <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100 shadow-sm">
+                  <label htmlFor="client-assignment" className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Client Assignment *</label>
                   <select
+                    id="client-assignment"
                     value={businessFormUser?.id || ''}
                     onChange={e => setBusinessFormUser(users.find(u => u.id === e.target.value) || null)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none"
+                    className="w-full bg-white border border-slate-200 rounded-2xl px-5 py-4 text-sm font-bold text-slate-800 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none transition-all shadow-sm"
                   >
-                    <option value="">— Select Customer —</option>
-                    {users.filter(u => u.role === 1 || u.role === 'Customer').map(u => (
+                    <option value="">— Choose a Customer —</option>
+                    {customerUsers.map(u => (
                       <option key={u.id} value={u.id}>{u.name} ({u.email})</option>
                     ))}
                   </select>
                 </div>
 
                 {/* Business Details */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                   <div className="col-span-2">
-                    <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Business Name *</label>
+                    <label htmlFor="biz-name" className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">Legal Business Name *</label>
                     <input
+                      id="biz-name"
                       type="text"
                       value={businessFormData.name}
-                      onChange={e => setBusinessFormData({ ...businessFormData, name: e.target.value })}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none"
-                      placeholder="Legal business name"
+                      onChange={e => setBusinessFormData(prev => ({ ...prev, name: e.target.value }))}
+                      className="w-full bg-white border-2 border-slate-100 rounded-2xl px-5 py-4 text-sm font-bold text-slate-900 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 outline-none transition-all shadow-sm"
+                      placeholder="e.g. Acme Corporation Pvt Ltd"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Tax ID *</label>
+                    <label htmlFor="biz-taxid" className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">Tax ID Number *</label>
                     <input
+                      id="biz-taxid"
                       type="text"
                       value={businessFormData.taxId}
-                      onChange={e => setBusinessFormData({ ...businessFormData, taxId: e.target.value })}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none"
+                      onChange={e => setBusinessFormData(prev => ({ ...prev, taxId: e.target.value }))}
+                      className="w-full bg-white border-2 border-slate-100 rounded-2xl px-5 py-4 text-sm font-bold text-slate-900 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 outline-none transition-all shadow-sm"
                       placeholder="PAN / VAT / GST"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Contact *</label>
+                    <label htmlFor="biz-contact" className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">Contact Number *</label>
                     <input
-                      type="text"
+                      id="biz-contact"
+                      type="tel"
                       value={businessFormData.contact}
-                      onChange={e => setBusinessFormData({ ...businessFormData, contact: e.target.value })}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none"
-                      placeholder="Phone number"
+                      onChange={e => setBusinessFormData(prev => ({ ...prev, contact: e.target.value }))}
+                      className="w-full bg-white border-2 border-slate-100 rounded-2xl px-5 py-4 text-sm font-bold text-slate-900 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 outline-none transition-all shadow-sm"
+                      placeholder="+91 00000 00000"
                     />
                   </div>
 
                   <div className="col-span-2">
-                    <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Address</label>
+                    <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Registered Address</label>
                     <input
                       type="text"
+                      autoComplete="off"
                       value={businessFormData.address}
-                      onChange={e => setBusinessFormData({ ...businessFormData, address: e.target.value })}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none"
-                      placeholder="Business address"
+                      onChange={e => setBusinessFormData(prev => ({ ...prev, address: e.target.value }))}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3.5 text-sm font-bold text-slate-800 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none transition-all shadow-sm"
+                      placeholder="Full official address"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Country</label>
+                    <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Country of Operation</label>
                     <select
                       value={businessFormData.country}
                       onChange={e => {
@@ -1211,9 +1269,9 @@ const AdminPanel: React.FC = () => {
                           'Other': { currency: 'USD', symbol: '$' }
                         };
                         const data = countryData[e.target.value] || countryData['Other'];
-                        setBusinessFormData({ ...businessFormData, country: e.target.value, currency: data.currency, currencySymbol: data.symbol });
+                        setBusinessFormData(prev => ({ ...prev, country: e.target.value, currency: data.currency, currencySymbol: data.symbol }));
                       }}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none"
+                      className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3.5 text-sm font-bold text-slate-800 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none transition-all shadow-sm"
                     >
                       <option>India</option>
                       <option>United States</option>
@@ -1226,8 +1284,8 @@ const AdminPanel: React.FC = () => {
                     <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Entity Structure</label>
                     <select
                       value={businessFormData.type}
-                      onChange={e => setBusinessFormData({ ...businessFormData, type: parseInt(e.target.value) })}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none"
+                      onChange={e => setBusinessFormData(prev => ({ ...prev, type: parseInt(e.target.value) }))}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3.5 text-sm font-bold text-slate-800 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none transition-all shadow-sm"
                     >
                       <option value={BusinessType.PRIVATE}>Private Limited</option>
                       <option value={BusinessType.PUBLIC}>Public Limited</option>
@@ -1238,137 +1296,104 @@ const AdminPanel: React.FC = () => {
                   </div>
 
                   <div>
-                    <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Industry</label>
+                    <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Industry Sector</label>
                     <input
                       type="text"
+                      autoComplete="off"
                       value={businessFormData.industry}
-                      onChange={e => setBusinessFormData({ ...businessFormData, industry: e.target.value })}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none"
-                      placeholder="e.g., Manufacturing, Retail"
+                      onChange={e => setBusinessFormData(prev => ({ ...prev, industry: e.target.value }))}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3.5 text-sm font-bold text-slate-800 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none transition-all shadow-sm"
+                      placeholder="e.g. Retail, Tech, Manufacturing"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">GST Number</label>
+                    <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">GST Identification No.</label>
                     <input
                       type="text"
+                      autoComplete="off"
                       value={businessFormData.gstNumber || ''}
-                      onChange={e => setBusinessFormData({ ...businessFormData, gstNumber: e.target.value })}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none"
+                      onChange={e => setBusinessFormData(prev => ({ ...prev, gstNumber: e.target.value }))}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3.5 text-sm font-bold text-slate-800 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none transition-all shadow-sm font-mono"
                       placeholder="Optional"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">License No.</label>
+                    <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Trade License No.</label>
                     <input
                       type="text"
+                      autoComplete="off"
                       value={businessFormData.licenseNumber}
-                      onChange={e => setBusinessFormData({ ...businessFormData, licenseNumber: e.target.value })}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none"
-                      placeholder="Business license"
+                      onChange={e => setBusinessFormData(prev => ({ ...prev, licenseNumber: e.target.value }))}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3.5 text-sm font-bold text-slate-800 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none transition-all shadow-sm"
+                      placeholder="Legal license code"
                     />
                   </div>
 
-                  <div className="col-span-2">
-                    <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Bank Name *</label>
-                    <input
-                      type="text"
-                      value={businessFormData.bankName}
-                      onChange={e => {
-                        setBusinessFormData({ ...businessFormData, bankName: e.target.value });
-                        setBankValidationErrors({ ...bankValidationErrors, bankName: '' });
-                      }}
-                      className={`w-full bg-slate-50 border rounded-xl px-4 py-3 text-sm focus:outline-none ${
-                        bankValidationErrors.bankName ? 'border-red-400 focus:border-red-500' : 'border-slate-200 focus:border-blue-500'
-                      }`}
-                      placeholder="e.g., State Bank of India, HDFC Bank"
-                    />
-                    {bankValidationErrors.bankName && (
-                      <p className="text-red-500 text-[8px] mt-1 font-bold flex items-center gap-1">
-                        <i className="fas fa-exclamation-circle"></i> {bankValidationErrors.bankName}
-                      </p>
-                    )}
-                  </div>
+                  <div className="col-span-2 bg-slate-50 p-6 rounded-2xl border border-dashed border-slate-200 space-y-4">
+                    <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Banking & Financials</h5>
+                    
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="col-span-2">
+                        <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Bank Institution *</label>
+                        <input
+                          type="text"
+                          value={businessFormData.bankName}
+                          onChange={e => {
+                            setBusinessFormData(prev => ({ ...prev, bankName: e.target.value }));
+                            if (bankValidationErrors.bankName) setBankValidationErrors(v => ({ ...v, bankName: '' }));
+                          }}
+                          className={`w-full bg-white border rounded-xl px-4 py-3.5 text-sm font-bold text-slate-800 focus:outline-none transition-all shadow-sm ${bankValidationErrors.bankName ? 'border-red-400 ring-4 ring-red-50' : 'border-slate-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-50'}`}
+                          placeholder="e.g. ICICI Bank, State Bank of India"
+                        />
+                        {bankValidationErrors.bankName && <p className="text-red-500 text-[8px] mt-1 font-bold uppercase tracking-widest"><i className="fas fa-exclamation-triangle mr-1"></i> {bankValidationErrors.bankName}</p>}
+                      </div>
 
-                  <div>
-                    <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Account Number *</label>
-                    <input
-                      type="text"
-                      value={businessFormData.bankAccount}
-                      onChange={e => {
-                        setBusinessFormData({ ...businessFormData, bankAccount: e.target.value });
-                        setBankValidationErrors({ ...bankValidationErrors, bankAccount: '' });
-                      }}
-                      inputMode="numeric"
-                      className={`w-full bg-slate-50 border rounded-xl px-4 py-3 text-sm focus:outline-none ${
-                        bankValidationErrors.bankAccount ? 'border-red-400 focus:border-red-500' : 'border-slate-200 focus:border-blue-500'
-                      }`}
-                      placeholder="9-18 digits"
-                    />
-                    {bankValidationErrors.bankAccount && (
-                      <p className="text-red-500 text-[8px] mt-1 font-bold flex items-center gap-1">
-                        <i className="fas fa-exclamation-circle"></i> {bankValidationErrors.bankAccount}
-                      </p>
-                    )}
-                  </div>
+                      <div>
+                        <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Account Number *</label>
+                        <input
+                          type="text"
+                          value={businessFormData.bankAccount}
+                          onChange={e => {
+                            setBusinessFormData(prev => ({ ...prev, bankAccount: e.target.value }));
+                            if (bankValidationErrors.bankAccount) setBankValidationErrors(v => ({ ...v, bankAccount: '' }));
+                          }}
+                          className={`w-full bg-white border rounded-xl px-4 py-3.5 text-sm font-bold text-slate-800 focus:outline-none transition-all shadow-sm ${bankValidationErrors.bankAccount ? 'order-red-400 ring-4 ring-red-50' : 'border-slate-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-50'}`}
+                          placeholder="9-18 digits"
+                        />
+                        {bankValidationErrors.bankAccount && <p className="text-red-500 text-[8px] mt-1 font-bold uppercase tracking-widest"><i className="fas fa-exclamation-triangle mr-1"></i> {bankValidationErrors.bankAccount}</p>}
+                      </div>
 
-                  <div>
-                    <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">IFSC Code *</label>
-                    <input
-                      type="text"
-                      value={businessFormData.ifscCode}
-                      onChange={e => {
-                        const ifsc = e.target.value.toUpperCase();
-                        setBusinessFormData({ ...businessFormData, ifscCode: ifsc });
-                        setBankValidationErrors({ ...bankValidationErrors, ifscCode: '' });
-                        // Auto-populate branch name if IFSC is found in database
-                        if (ifsc.length === 11 && IFSC_DATABASE[ifsc]) {
-                          setBusinessFormData((prev: any) => ({
-                            ...prev,
-                            ifscCode: ifsc,
-                            branchName: IFSC_DATABASE[ifsc]
-                          }));
-                        }
-                      }}
-                      maxLength="11"
-                      className={`w-full bg-slate-50 border rounded-xl px-4 py-3 text-sm focus:outline-none font-mono ${
-                        bankValidationErrors.ifscCode ? 'border-red-400 focus:border-red-500' : 'border-slate-200 focus:border-blue-500'
-                      }`}
-                      placeholder="e.g., SBIN0000001"
-                    />
-                    {bankValidationErrors.ifscCode && (
-                      <p className="text-red-500 text-[8px] mt-1 font-bold flex items-center gap-1">
-                        <i className="fas fa-exclamation-circle"></i> {bankValidationErrors.ifscCode}
-                      </p>
-                    )}
-                    <p className="text-[8px] text-slate-400 mt-1">Format: ABCD0000123</p>
-                  </div>
+                      <div>
+                        <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">IFSC Code *</label>
+                        <input
+                          type="text"
+                          value={businessFormData.ifscCode}
+                          onChange={e => {
+                            const val = e.target.value.toUpperCase();
+                            setBusinessFormData(prev => ({ ...prev, ifscCode: val, branchName: IFSC_DATABASE[val] || prev.branchName }));
+                            if (bankValidationErrors.ifscCode) setBankValidationErrors(v => ({ ...v, ifscCode: '' }));
+                          }}
+                          className={`w-full bg-white border rounded-xl px-4 py-3.5 text-sm font-bold text-slate-800 focus:outline-none transition-all shadow-sm font-mono ${bankValidationErrors.ifscCode ? 'border-red-400 ring-4 ring-red-50' : 'border-slate-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-50'}`}
+                          placeholder="ABCD0000123"
+                        />
+                        {bankValidationErrors.ifscCode && <p className="text-red-500 text-[8px] mt-1 font-bold uppercase tracking-widest"><i className="fas fa-exclamation-triangle mr-1"></i> {bankValidationErrors.ifscCode}</p>}
+                      </div>
 
-                  <div className="col-span-2">
-                    <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">
-                      Branch Name *
-                      {IFSC_DATABASE[businessFormData.ifscCode] && (
-                        <span className="ml-2 text-emerald-600 font-bold">(Auto-populated from IFSC)</span>
-                      )}
-                    </label>
-                    <input
-                      type="text"
-                      value={businessFormData.branchName}
-                      onChange={e => {
-                        setBusinessFormData({ ...businessFormData, branchName: e.target.value });
-                        setBankValidationErrors({ ...bankValidationErrors, branchName: '' });
-                      }}
-                      className={`w-full bg-slate-50 border rounded-xl px-4 py-3 text-sm focus:outline-none ${
-                        bankValidationErrors.branchName ? 'border-red-400 focus:border-red-500' : 'border-slate-200 focus:border-blue-500'
-                      }`}
-                      placeholder="e.g., SBI - New Delhi Branch"
-                    />
-                    {bankValidationErrors.branchName && (
-                      <p className="text-red-500 text-[8px] mt-1 font-bold flex items-center gap-1">
-                        <i className="fas fa-exclamation-circle"></i> {bankValidationErrors.branchName}
-                      </p>
-                    )}
+                      <div className="col-span-2">
+                        <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Branch Name *</label>
+                        <input
+                          type="text"
+                          value={businessFormData.branchName}
+                          onChange={e => {
+                            setBusinessFormData(prev => ({ ...prev, branchName: e.target.value }));
+                            if (bankValidationErrors.branchName) setBankValidationErrors(v => ({ ...v, branchName: '' }));
+                          }}
+                          className={`w-full bg-white border rounded-xl px-4 py-3.5 text-sm font-bold text-slate-800 focus:outline-none transition-all shadow-sm ${bankValidationErrors.branchName ? 'border-red-400 ring-4 ring-red-50' : 'border-slate-200 focus:border-blue-500 focus:ring-4 focus:ring-blue-50'}`}
+                        />
+                      </div>
+                    </div>
                   </div>
 
                   <div>
@@ -1376,21 +1401,22 @@ const AdminPanel: React.FC = () => {
                     <input
                       type="date"
                       value={businessFormData.incorporationDate}
-                      onChange={e => setBusinessFormData({ ...businessFormData, incorporationDate: e.target.value })}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none"
+                      onChange={e => setBusinessFormData(prev => ({ ...prev, incorporationDate: e.target.value }))}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3.5 text-sm font-bold text-slate-800 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none transition-all shadow-sm"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Employees</label>
+                    <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Employee Count</label>
                     <input
                       type="number"
                       value={businessFormData.employees}
-                      onChange={e => setBusinessFormData({ ...businessFormData, employees: e.target.value })}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none"
+                      onChange={e => setBusinessFormData(prev => ({ ...prev, employees: e.target.value }))}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3.5 text-sm font-bold text-slate-800 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none transition-all shadow-sm"
                       placeholder="0"
                     />
                   </div>
+                </div>
                 </div>
 
                 {businessFormError && (
@@ -1399,14 +1425,15 @@ const AdminPanel: React.FC = () => {
                   </div>
                 )}
 
-                <div className="flex gap-3 pt-2">
-                  <button onClick={() => setShowBusinessForm(false)} className="flex-1 py-3 text-slate-400 font-bold text-xs uppercase tracking-widest border border-slate-200 rounded-xl">Cancel</button>
+                <div className="flex flex-col sm:flex-row gap-4 pt-6">
+                  <button onClick={() => setShowBusinessForm(false)} className="flex-1 py-4 text-slate-400 font-black text-[10px] uppercase tracking-[0.2em] border-2 border-slate-100 rounded-2xl hover:bg-slate-50 transition-all">Cancel</button>
                   <button
                     onClick={handleRegisterBusiness}
                     disabled={businessFormLoading}
-                    className="flex-1 py-3 bg-emerald-600 text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-lg shadow-emerald-500/20 disabled:opacity-50"
+                    className="flex-[2] py-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-xl shadow-emerald-500/30 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
                   >
-                    {businessFormLoading ? 'Registering...' : 'Register Business'}
+                    {businessFormLoading ? <i className="fas fa-circle-notch fa-spin"></i> : <i className="fas fa-cloud-upload-alt"></i>}
+                    {businessFormLoading ? 'Processing...' : 'Register Business'}
                   </button>
                 </div>
               </div>
@@ -1417,11 +1444,11 @@ const AdminPanel: React.FC = () => {
 
       {/* Plan Form Modal */}
       {showPlanForm && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[80] flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
-          <div className="bg-white rounded-[2rem] w-full max-w-md sm:max-w-lg md:max-w-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 my-8">
+        <div className="fixed inset-0 bg-slate-900/80 z-[100] flex items-start justify-center p-2 sm:p-4 overflow-y-auto backdrop-blur-sm scroll-smooth">
+          <div className="relative bg-white rounded-[2rem] w-full max-w-md sm:max-w-lg md:max-w-2xl shadow-2xl overflow-hidden my-auto pointer-events-auto ring-1 ring-white/50 animate-in fade-in duration-300">
             <div className="h-1.5 bg-gradient-to-r from-blue-600 to-emerald-500"></div>
-            <div className="p-4 sm:p-8">
-              <h3 className="text-xl font-black text-slate-800 mb-1 uppercase tracking-tight">{editingPlanId ? 'Edit Plan' : 'Create New Plan'}</h3>
+            <div className="p-4 sm:p-10">
+              <h3 className="text-3xl font-black text-slate-800 mb-1 uppercase tracking-tight">{editingPlanId ? 'Edit Plan' : 'Create New Plan'}</h3>
               <p className="text-xs text-slate-400 mb-6">Configure subscription plan details and features</p>
 
               {planFormError && (
@@ -1431,48 +1458,53 @@ const AdminPanel: React.FC = () => {
               )}
 
               <form onSubmit={handleSavePlan} className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="max-h-[60vh] overflow-y-auto p-1 pr-2 space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="col-span-2">
-                    <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Plan Name *</label>
+                    <label htmlFor="plan-name" className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">Plan Name *</label>
                     <input
+                      id="plan-name"
                       type="text"
                       value={planFormData.name}
                       onChange={e => setPlanFormData({ ...planFormData, name: e.target.value })}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none"
+                      className="w-full bg-white border-2 border-slate-100 rounded-2xl px-5 py-4 text-sm font-bold text-slate-900 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 outline-none transition-all shadow-sm"
                       placeholder="e.g., Starter, Professional"
                     />
                   </div>
 
                   <div className="col-span-2">
-                    <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Description</label>
+                    <label htmlFor="plan-desc" className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">Description</label>
                     <textarea
+                      id="plan-desc"
                       value={planFormData.description}
                       onChange={e => setPlanFormData({ ...planFormData, description: e.target.value })}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none resize-none"
+                      className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-4 text-sm font-bold text-slate-900 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 outline-none transition-all resize-none"
                       placeholder="Plan description"
                       rows={2}
                     />
                   </div>
 
                   <div>
-                    <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Price (₹) *</label>
+                    <label htmlFor="plan-price" className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">Price (₹) *</label>
                     <input
+                      id="plan-price"
                       type="number"
                       value={planFormData.price}
                       onChange={e => setPlanFormData({ ...planFormData, price: e.target.value })}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none"
+                      className="w-full bg-white border-2 border-slate-100 rounded-2xl px-5 py-4 text-sm font-bold text-slate-900 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 outline-none transition-all shadow-sm"
                       placeholder="0"
                       min="0"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Validity (Period) *</label>
+                    <label htmlFor="plan-validity" className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">Validity (Period) *</label>
                     <input
+                      id="plan-validity"
                       type="text"
                       value={planFormData.validity}
                       onChange={e => setPlanFormData({ ...planFormData, validity: e.target.value })}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none"
+                      className="w-full bg-white border-2 border-slate-100 rounded-2xl px-5 py-4 text-sm font-bold text-slate-900 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 outline-none transition-all shadow-sm"
                       placeholder="e.g., Month, Year"
                     />
                   </div>
@@ -1483,7 +1515,7 @@ const AdminPanel: React.FC = () => {
                       type="number"
                       value={planFormData.maxCompanies}
                       onChange={e => setPlanFormData({ ...planFormData, maxCompanies: e.target.value })}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none"
+                      className="w-full bg-white border border-slate-300 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none shadow-sm"
                       min="1"
                     />
                   </div>
@@ -1494,7 +1526,7 @@ const AdminPanel: React.FC = () => {
                       type="number"
                       value={planFormData.maxProducts}
                       onChange={e => setPlanFormData({ ...planFormData, maxProducts: e.target.value })}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none"
+                      className="w-full bg-white border border-slate-300 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none shadow-sm"
                       min="1"
                     />
                   </div>
@@ -1505,7 +1537,7 @@ const AdminPanel: React.FC = () => {
                       type="number"
                       value={planFormData.maxUsers}
                       onChange={e => setPlanFormData({ ...planFormData, maxUsers: e.target.value })}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none"
+                      className="w-full bg-white border border-slate-300 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none shadow-sm"
                       min="1"
                     />
                   </div>
@@ -1515,7 +1547,7 @@ const AdminPanel: React.FC = () => {
                     <select
                       value={planFormData.status}
                       onChange={e => setPlanFormData({ ...planFormData, status: e.target.value })}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none"
+                      className="w-full bg-white border border-slate-300 rounded-xl px-4 py-3 text-sm focus:border-blue-500 outline-none shadow-sm"
                     >
                       <option value="Active">Active</option>
                       <option value="Inactive">Inactive</option>
@@ -1533,21 +1565,23 @@ const AdminPanel: React.FC = () => {
                     />
                   </div>
                 </div>
+                </div>
 
-                <div className="flex gap-3 pt-2">
-                  <button 
+                <div className="flex flex-col sm:flex-row gap-4 pt-8">
+                  <button
                     type="button"
-                    onClick={() => setShowPlanForm(false)} 
-                    className="flex-1 py-3 text-slate-400 font-bold text-xs uppercase tracking-widest border border-slate-200 rounded-xl"
+                    onClick={() => setShowPlanForm(false)}
+                    className="flex-1 py-4 text-slate-400 font-black text-[10px] uppercase tracking-[0.2em] border-2 border-slate-100 rounded-2xl hover:bg-slate-50 transition-all"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={planFormLoading}
-                    className="flex-1 py-3 bg-emerald-600 text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-lg shadow-emerald-500/20 disabled:opacity-50"
+                    className="flex-[2] py-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-xl shadow-emerald-500/30 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
                   >
-                    {planFormLoading ? 'Saving...' : 'Save Plan'}
+                    {planFormLoading ? <i className="fas fa-circle-notch fa-spin"></i> : <i className="fas fa-check-circle"></i>}
+                    {planFormLoading ? 'Processing...' : 'Save Subscription Plan'}
                   </button>
                 </div>
               </form>
@@ -1555,26 +1589,6 @@ const AdminPanel: React.FC = () => {
           </div>
         </div>
       )}
-    </div>
-  );
-};
-
-const StatCard: React.FC<{ title: string; value: number | string; icon: string; color: string }> = ({ title, value, icon, color }) => {
-  const colors: any = {
-    blue: 'bg-blue-50 text-blue-600',
-    emerald: 'bg-emerald-50 text-emerald-600',
-    amber: 'bg-amber-50 text-amber-600',
-    purple: 'bg-purple-50 text-purple-600',
-  };
-  return (
-    <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm flex items-center gap-5">
-      <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-xl shadow-sm flex-shrink-0 ${colors[color] || colors.blue}`}>
-        <i className={`fas ${icon}`}></i>
-      </div>
-      <div>
-        <h4 className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">{title}</h4>
-        <p className="text-3xl font-black text-slate-900 tracking-tighter">{value}</p>
-      </div>
     </div>
   );
 };

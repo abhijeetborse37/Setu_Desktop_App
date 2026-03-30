@@ -6,7 +6,9 @@
   "author": "Abhijeet Borse",
   "scripts": {
     "start": "electron .",
-    "build": "electron-builder"
+    "build": "npm run build:erp && electron-builder --config.directories.output=C:\\Setu_App_Build\\dist",
+    "build:erp": "cd Setu_ERP && npm run build",
+    "build:local": "electron-builder --config.directories.output=C:\\Setu_App_Build\\dist"
   },
   "devDependencies": {
     "electron": "^41.0.3",
@@ -15,16 +17,35 @@
   "build": {
     "appId": "com.setu.erp",
     "productName": "Setu ERP",
+    "copyright": "Copyright © 2026 Abhijeet Borse",
     "directories": {
       "output": "dist"
     },
+    "asar": true,
     "files": [
       "Electron/**/*",
-      "Setu_API/**/*",
       "Setu_ERP/dist/**/*"
     ],
+    "extraResources": [
+      {
+        "from": "Setu_API/publish",
+        "to": "Setu_API",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "icon": "build/icon.png",
+      "requestedExecutionLevel": "asInvoker"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": false,
+      "deleteAppDataOnUninstall": false,
+      "shortcutName": "Setu ERP"
     }
   }
 }

@@ -12,6 +12,20 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  const emailRef = React.useRef<HTMLInputElement>(null);
+
+  // Snatch focus back to the input when component mounts
+  // This prevents 'frozen cursor' issues in Electron after logout/redirection
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      if (emailRef.current) {
+        emailRef.current.focus();
+        // Force the window to acknowledge the focus - critical for some Electron environments
+        window.focus();
+      }
+    }, 150);
+    return () => clearTimeout(timer);
+  }, []);
 
   // Helper function to convert role string to enum
   const parseRole = (role: string | number): UserRole => {
@@ -32,7 +46,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
       }
 
       const res = await authService.login({
-        email: email.toLowerCase(),
+        emailOrUsername: email.trim(),
         password: password
       });
 
@@ -110,49 +124,50 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
         </div>
 
         {/* Card */}
-        <div className="bg-white/5 backdrop-blur-xl rounded-[2.5rem] border border-white/10 shadow-2xl overflow-hidden">
+        <div className="relative z-10 bg-slate-900/95 rounded-[2.5rem] border border-white/10 shadow-2xl overflow-hidden pointer-events-auto">
           <div className="p-8 sm:p-10">
             <h2 className="text-2xl font-black text-white mb-1.5">Welcome Back</h2>
             <p className="text-sm text-slate-400 mb-8">Sign in to access your business portal</p>
 
             <form onSubmit={handleSubmit} className="space-y-5">
               {/* Email */}
-              <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Work Email / Username</label>
-                <div className="relative">
+               <div>
+                <label htmlFor="login-email" className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">Work Email / Username</label>
+                <div className="relative group">
                   <input
                     id="login-email"
+                    ref={emailRef}
                     required
-                    type="email"
-                    className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-sm text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all pl-12 placeholder:text-slate-500"
-                    placeholder="name@company.com"
+                    type="text"
+                    className="w-full bg-white/5 border-2 border-white/5 rounded-2xl px-5 py-4 text-sm text-white focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500/50 outline-none transition-all pl-12 placeholder:text-slate-600 font-bold"
+                    placeholder="name@company.com or username"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     autoComplete="username"
                   />
-                  <i className="fas fa-envelope absolute left-5 top-1/2 -translate-y-1/2 text-slate-500"></i>
+                  <i className="fas fa-envelope absolute left-5 top-1/2 -translate-y-1/2 text-slate-500 transition-colors group-focus-within:text-blue-400"></i>
                 </div>
               </div>
 
               {/* Password */}
-              <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Password</label>
-                <div className="relative">
+               <div>
+                <label htmlFor="login-password" className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">Password</label>
+                <div className="relative group">
                   <input
                     id="login-password"
                     required
                     type={showPassword ? 'text' : 'password'}
-                    className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-sm text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all pl-12 pr-12 placeholder:text-slate-500"
+                    className="w-full bg-white/5 border-2 border-white/5 rounded-2xl px-5 py-4 text-sm text-white focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500/50 outline-none transition-all pl-12 pr-12 placeholder:text-slate-600 font-bold"
                     placeholder="••••••••"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     autoComplete="current-password"
                   />
-                  <i className="fas fa-lock absolute left-5 top-1/2 -translate-y-1/2 text-slate-500"></i>
+                  <i className="fas fa-lock absolute left-5 top-1/2 -translate-y-1/2 text-slate-500 transition-colors group-focus-within:text-blue-400"></i>
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
+                    className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white transition-colors p-1"
                   >
                     <i className={`fas ${showPassword ? 'fa-eye-slash' : 'fa-eye'}`}></i>
                   </button>

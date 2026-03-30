@@ -10,14 +10,32 @@ using StackExchange.Redis;
 var builder = WebApplication.CreateBuilder(args);
 //AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
 
-var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
-builder.WebHost.UseUrls($"http://localhost:{port}");
+var port = "5099";
+builder.WebHost.UseUrls($"http://127.0.0.1:{port}");
 
 // Add services to the container.
-builder.Services.AddControllers()
+builder.Services.AddControllers(options => 
+    {
+        options.SuppressImplicitRequiredAttributeForNonNullableReferenceTypes = true;
+    })
     .AddJsonOptions(options => {
         options.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+    })
+    .ConfigureApiBehaviorOptions(options =>
+    {
+        options.InvalidModelStateResponseFactory = context =>
+        {
+            var errors = context.ModelState
+                .Where(e => e.Value.Errors.Count > 0)
+                .Select(e => new {
+                    Name = e.Key,
+                    Message = e.Value.Errors.First().ErrorMessage
+                }).ToArray();
+            
+            System.Console.WriteLine($"[VALIDATION FAILED] {System.Text.Json.JsonSerializer.Serialize(errors)}");
+            return new Microsoft.AspNetCore.Mvc.BadRequestObjectResult(new { message = "Validation Failed: " + string.Join(", ", errors.Select(e => e.Message)), errors = errors });
+        };
     });
 
 builder.Services.AddEndpointsApiExplorer();
@@ -79,13 +97,31 @@ builder.Services.AddSwaggerGen(c =>
 
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
 {
-    var dbPath = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-        "Setu",
-        "setu.db"
-    );
-    Directory.CreateDirectory(Path.GetDirectoryName(dbPath)!);
+    // Try to get the persistent path from command line arguments (passed by Electron)
+    var dbDirectory = builder.Configuration["db-path"] ?? AppDomain.CurrentDomain.BaseDirectory;
+    dbDirectory = dbDirectory.Trim('\"');
+    
+    var dbPath = Path.Combine(dbDirectory, "setu_v1.db");
 
+    // Migration attempt: If DB is NOT in persistent storage but exists in local folder
+    if (!File.Exists(dbPath))
+    {
+        var localDbPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "setu_v1.db");
+        if (File.Exists(localDbPath))
+        {
+            try {
+                // Ensure target directory exists
+                if (!Directory.Exists(dbDirectory)) Directory.CreateDirectory(dbDirectory);
+                
+                File.Copy(localDbPath, dbPath);
+                Console.WriteLine($"[DB INIT] MIGRATED existing data from {localDbPath} to {dbPath}");
+            } catch (Exception ex) {
+                Console.WriteLine($"[DB INIT] Data migration failed: {ex.Message}");
+            }
+        }
+    }
+
+    Console.WriteLine($"[DB INIT] Using Database: {dbPath}");
     options.UseSqlite($"Data Source={dbPath}");
 });
 
@@ -167,14 +203,39 @@ using (var scope = app.Services.CreateScope())
     var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
     var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
 
+    Console.WriteLine($"[DB INIT] Database Path: {db.Database.GetDbConnection().ConnectionString}");
+
     try
     {
-        db.Database.Migrate(); // Ensure migrations are applied
-        //db.Database.EnsureCreated();
+        Console.WriteLine("[DB INIT] Attempting to apply migrations (this will create tables if they don't exist)...");
+        db.Database.Migrate(); // Ensures all migrations are applied and tracked
+        
+        Console.WriteLine("[DB INIT] Schema setup complete. Verifying tables...");
+
+        // Safely check for Users table
+        var tables = db.Database.SqlQueryRaw<string>("SELECT name FROM sqlite_master WHERE type='table'").ToList();
+        Console.WriteLine($"[DB INIT] Tables found: {string.Join(", ", tables)}");
+
+        if (!tables.Contains("Users"))
+        {
+            Console.WriteLine("[DB INIT] CRITICAL: Users table still missing after setup!");
+        }
+
+        // Safely add Username column only if it doesn't already exist (avoids noisy error log)
+        if (tables.Contains("Users"))
+        {
+            var columns = db.Database.SqlQueryRaw<string>("SELECT name FROM pragma_table_info('Users')").ToList();
+            if (!columns.Contains("Username"))
+            {
+                db.Database.ExecuteSqlRaw("ALTER TABLE Users ADD COLUMN Username TEXT NULL;");
+                Console.WriteLine("[DB INIT] Added Username column to Users table.");
+            }
+        }
 
         var hasAdmin = db.Users.Any(u => u.Role == Setu.Api.Models.UserRole.Admin);
         if (!hasAdmin)
         {
+            Console.WriteLine("[DB INIT] Seeding Super Admin...");
             var adminPassword = "Admin@123";
             var adminUser = new Setu.Api.Models.User
             {
@@ -192,16 +253,21 @@ using (var scope = app.Services.CreateScope())
             db.Users.Add(adminUser);
             db.SaveChanges();
 
-            logger.LogInformation("==============================================");
-            logger.LogInformation("  SUPER ADMIN SEEDED SUCCESSFULLY!");
-            logger.LogInformation("  Email   : admin@setu.in");
-            logger.LogInformation("  Password: Admin@123");
-            logger.LogInformation("  CHANGE THIS PASSWORD AFTER FIRST LOGIN!");
-            logger.LogInformation("==============================================");
+            Console.WriteLine("==============================================");
+            Console.WriteLine("  SUPER ADMIN SEEDED SUCCESSFULLY!");
+            Console.WriteLine("  Email   : admin@setu.in");
+            Console.WriteLine("  Password: Admin@123");
+            Console.WriteLine("==============================================");
+        }
+        else
+        {
+            Console.WriteLine("[DB INIT] Admin already exists.");
         }
     }
     catch (Exception ex)
     {
+        Console.WriteLine($"[DB INIT] ERROR: {ex.Message}");
+        Console.WriteLine(ex.StackTrace);
         logger.LogError(ex, "Error during database seeding.");
     }
 }
@@ -236,24 +302,29 @@ app.UseExceptionHandler(exceptionHandlerApp =>
         context.Response.StatusCode = 500;
         context.Response.ContentType = "application/json";
 
-        // Add explicit CORS headers to the error response so the frontend isn't blocked by CORS policies.
-        var origin = context.Request.Headers["Origin"].ToString();
-        if (origin == "https://setu.abhijitborse3797.workers.dev" || origin == "http://localhost:5173")
+        // Desktop app needs CORS even for error responses
+        if (context.Request.Headers.TryGetValue("Origin", out var origin))
         {
             context.Response.Headers.Append("Access-Control-Allow-Origin", origin);
-            context.Response.Headers.Append("Access-Control-Allow-Credentials", "true");
         }
 
         await context.Response.WriteAsJsonAsync(new 
         { 
-            message = "Database or Internal Error Occurred.",
-            details = exception?.Message,
-            inner = exception?.InnerException?.Message
+            message = "Server Error: " + (exception?.Message ?? "Unknown"),
+            details = exception?.InnerException?.Message ?? "No inner exception",
+            trace = exception?.StackTrace 
         });
     });
 });
 
 app.UseRouting();
+
+// REQUEST LOGGER for debugging
+app.Use(async (context, next) => {
+    var logger = context.RequestServices.GetRequiredService<ILogger<Program>>();
+    logger.LogInformation("Incoming Request: {Method} {Path}", context.Request.Method, context.Request.Path);
+    await next();
+});
 
 // CORS is best placed after UseRouting and before Auth
 app.UseCors("AllowFrontend");

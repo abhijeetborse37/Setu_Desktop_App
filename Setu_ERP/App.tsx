@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, startTransition } from 'react';
 import { Company, Product, Customer, Transaction, User, UserRole } from './types';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
@@ -23,8 +23,15 @@ import { companyService, productService, transactionService, customerService, da
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSidebarMinimized, setIsSidebarMinimized] = useState(() => localStorage.getItem('setu_sidebar_min') === 'true');
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
+
+  // Persist sidebar minimized preference
+  const handleSetSidebarMinimized = (v: boolean) => {
+    setIsSidebarMinimized(v);
+    localStorage.setItem('setu_sidebar_min', String(v));
+  };
 
   // API-synchronized states
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -39,67 +46,50 @@ const App: React.FC = () => {
     else localStorage.removeItem('setu_active_company');
   };
 
+  // Concurrency guard: prevent overlapping API calls
+  const isFetchingRef = React.useRef(false);
+
   const fetchData = async () => {
     if (!currentUser) return;
+    // Prevent concurrent fetches from overlapping and hammering the UI thread
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
     setIsSyncing(true);
-    
-    const normalize = (obj: any) => {
-      if (!obj || typeof obj !== 'object') return obj;
-      const newObj: any = {};
-      for (const key in obj) {
-        const normalizedKey = key.toLowerCase() === 'id' ? 'id' : (key.charAt(0).toLowerCase() + key.slice(1));
-        newObj[normalizedKey] = obj[key];
-      }
-      return newObj;
-    };
 
     try {
-      // OPTIMIZATION: Use single unified endpoint instead of 4 separate calls
       const response = await dashboardService.getInitData();
       const data = response.data;
 
-      const normalizedCompanies = (data.companies || []).map(normalize);
-      const normalizedProducts = (data.products || []).map(normalize);
-      const normalizedCustomers = (data.customers || []).map(normalize);
-      const normalizedTransactions = (data.transactions || []).map(normalize);
+      // Wrap large state updates in startTransition to prevent blocking the UI thread
+      startTransition(() => {
+        setCompanies(data.companies || []);
+        setProducts(data.products || []);
+        setCustomers(data.customers || []);
+        setTransactions(data.transactions || []);
 
-      setCompanies(normalizedCompanies);
-      setProducts(normalizedProducts);
-      setCustomers(normalizedCustomers);
-      setTransactions(normalizedTransactions);
+        // Resolve active company INSIDE the transition so it batches with the state above
+        const companiesList: any[] = data.companies || [];
+        const resolvedId = activeCompanyId && companiesList.find((c: any) => c.id === activeCompanyId)
+          ? activeCompanyId
+          : companiesList.length > 0 ? companiesList[0].id : null;
 
-      // Set active company
-      let currentActiveId = activeCompanyId || data.activeCompanyId;
-      if (!currentActiveId || !normalizedCompanies.find((c: any) => c.id === currentActiveId)) {
-        currentActiveId = normalizedCompanies.length > 0 ? normalizedCompanies[0].id : null;
-      }
-      
-      if (currentActiveId && currentActiveId !== activeCompanyId) {
-        setActiveCompanyId(currentActiveId);
-      }
+        if (resolvedId && resolvedId !== activeCompanyId) {
+          setActiveCompanyId(resolvedId);
+        }
+      });
     } catch (err: any) {
       console.error('App: Error fetching dashboard data:', err.response?.data || err.message);
     } finally {
+      isFetchingRef.current = false;
       setIsSyncing(false);
     }
   };
 
+  // Fetch ONLY when the user session changes — NOT on every tab switch.
+  // Tab switching just re-renders already-loaded data; no new API call needed.
   useEffect(() => {
     fetchData();
-  }, [currentUser, activeCompanyId]);
-
-  // Refresh data when switching tabs (but not on initial load)
-  const [hasInitialLoad, setHasInitialLoad] = useState(false);
-  useEffect(() => {
-    if (hasInitialLoad && currentUser) {
-      fetchData();
-    }
-  }, [activeTab]);
-
-  useEffect(() => {
-    if (currentUser && !hasInitialLoad) {
-      setHasInitialLoad(true);
-    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser]);
 
   // Session handling
@@ -115,6 +105,8 @@ const App: React.FC = () => {
     localStorage.setItem('setu_user', JSON.stringify(user));
     // Admins land on admin panel; customers land on dashboard
     setActiveTab(user.role === UserRole.ADMIN ? 'admin' : 'dashboard');
+    // Ensure the window has focus after login to prevent "frozen cursor"
+    window.focus();
   };
 
   const handleLogout = () => {
@@ -235,19 +227,16 @@ const App: React.FC = () => {
           setIsOpen={setIsSidebarOpen}
           currentUser={currentUser}
           onLogout={handleLogout}
+          isMinimized={isSidebarMinimized}
+          setIsMinimized={handleSetSidebarMinimized}
         />
 
-        {isSidebarOpen && (
-          <div
-            className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-40 lg:hidden transition-opacity duration-300"
-            onClick={() => setIsSidebarOpen(false)}
-          />
-        )}
+        {/* Mobile overlay is now inside the Sidebar component */}
 
         <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
           <Header
             activeTab={activeTab}
-            companyName={activeCompany?.name}
+            companyName={!isAdmin ? activeCompany?.name : undefined}
             onMenuClick={() => setIsSidebarOpen(true)}
           />
 

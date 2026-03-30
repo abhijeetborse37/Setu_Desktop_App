@@ -20,6 +20,8 @@ namespace Setu.Api.Models
         [EmailAddress]
         public string Email { get; set; } = string.Empty;
         
+        public string? Username { get; set; }
+        
         [Required]
         public string PasswordHash { get; set; } = string.Empty;
         

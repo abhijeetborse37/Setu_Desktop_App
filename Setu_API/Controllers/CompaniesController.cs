@@ -80,9 +80,9 @@ namespace Setu.Api.Controllers
         [HttpPut("{id}")]
         public async Task<IActionResult> UpdateCompany(Guid id, Company company)
         {
-            if (id != company.Id) return BadRequest();
+            if (id != company.Id) return BadRequest(new { message = $"ID mismatch. Route ID: {id}, Payload ID: {company.Id}" });
             
-            var existingCompany = await _context.Companies.FindAsync(id);
+            var existingCompany = await _context.Companies.AsNoTracking().FirstOrDefaultAsync(c => c.Id == id);
             if (existingCompany == null) return NotFound();
 
             var userRole = User.FindFirst(ClaimTypes.Role)?.Value;

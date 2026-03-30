@@ -1,8 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import { Product, Transaction, Company, Customer, TransactionItem, User } from '../types';
-import { transactionService } from '../services/api';
+import { transactionService, customerService } from '../services/api';
 import InvoiceModal from './InvoiceModal';
 import { formatDate } from '../utils';
+import SearchableSelect from './SearchableSelect';
 
 interface Props {
   products: Product[];
@@ -42,6 +43,7 @@ const SalesManager: React.FC<Props> = ({ products, customers, transactions, acti
   const [itemsPerPage, setItemsPerPage] = useState(10);
 
   const [customerId, setCustomerId] = useState('');
+  const [newCustomerData, setNewCustomerData] = useState<{ name: string, phone: string, gst: string, email: string } | null>(null);
   const [saleDate, setSaleDate] = useState(new Date().toISOString().split('T')[0]);
   const [invoiceNumber, setInvoiceNumber] = useState('');
   const [roundOff, setRoundOff] = useState<string | number>('');
@@ -78,7 +80,7 @@ const SalesManager: React.FC<Props> = ({ products, customers, transactions, acti
           const product = products.find(p => p.id === value);
           if (product) {
             updated.price = product.price;
-            updated.cgstRate = product.cgstRate || ''; 
+            updated.cgstRate = product.cgstRate || '';
             updated.sgstRate = product.sgstRate || '';
           }
         }
@@ -133,16 +135,49 @@ const SalesManager: React.FC<Props> = ({ products, customers, transactions, acti
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isBusy) return;
+    setIsBusy(true);
 
-    const currentCustomerId = customerId;
     const currentLineItems = lineItems;
     const currentSaleDate = saleDate;
     const currentSummary = saleSummary;
 
-    const customer = customers.find(c => c.id === currentCustomerId);
-    if (!customer) {
-      alert("Please select a valid customer.");
-      return;
+    let activeCustomerId = customerId;
+    let activeCustomerName = '';
+    let activeCustomerGst = '';
+
+    if (!activeCustomerId && newCustomerData) {
+      // Create new customer on the fly
+      try {
+        // Ensure all required fields are provided for the backend CRM
+        const newCustRes = await customerService.create({
+          name: newCustomerData.name,
+          phone: newCustomerData.phone,
+          email: newCustomerData.email || `${newCustomerData.name.toLowerCase().replace(/\s/g, '.')}@temp.com`,
+          address: 'Direct Sale Customer',
+          group: 'New',
+          gstPanId: newCustomerData.gst,
+          companyId: activeCompany?.id || '',
+          userId: currentUser.id,
+          totalSpent: 0
+        });
+        activeCustomerId = newCustRes.data.id;
+        activeCustomerName = newCustomerData.name;
+        activeCustomerGst = newCustomerData.gst;
+      } catch (err: any) {
+        setIsBusy(false);
+        const errorMsg = err.response?.data?.message || err.response?.data || err.message;
+        alert("Failed to Register New Customer: " + errorMsg);
+        return;
+      }
+    } else {
+      const customer = customers.find(c => c.id === activeCustomerId);
+      if (!customer) {
+        setIsBusy(false);
+        alert("Please select a valid customer.");
+        return;
+      }
+      activeCustomerName = customer.name;
+      activeCustomerGst = customer.gstPanId || '';
     }
 
     const transactionItems: any[] = currentLineItems.map(line => {
@@ -190,8 +225,8 @@ const SalesManager: React.FC<Props> = ({ products, customers, transactions, acti
         roundOff: currentSummary.roundOff,
         date: currentSaleDate,
         invoiceNumber: invoiceNumber || autoInvoiceNumber,
-        entityName: customer.name,
-        entityGstNumber: customer.gstPanId || '',
+        entityName: activeCustomerName,
+        entityGstNumber: activeCustomerGst,
         companyId: activeCompany?.id || '',
         userId: currentUser.id
       };
@@ -252,6 +287,7 @@ const SalesManager: React.FC<Props> = ({ products, customers, transactions, acti
 
   const resetForm = () => {
     setCustomerId('');
+    setNewCustomerData(null);
     setEditingTransactionId(null);
     setRoundOff('');
     setInvoiceNumber('');
@@ -264,39 +300,39 @@ const SalesManager: React.FC<Props> = ({ products, customers, transactions, acti
 
   return (
     <div className="space-y-6 animate-in slide-in-from-bottom-2 duration-300">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <div className="flex flex-col lg:flex-row justify-between lg:items-center gap-6">
         <div>
-          <h2 className="text-xl font-bold text-slate-800 tracking-tight">Stock-Out (Sales)</h2>
-          <p className="text-xs text-slate-500">Create sales transactions with backorder support for unavailable stock</p>
+          <h1 className="text-3xl font-black text-slate-900 tracking-tight">Billing & Sales</h1>
+          <p className="text-[10px] text-slate-400 font-bold tracking-[0.2em]">Invoice Generation & Revenue Tracking</p>
         </div>
-        <div className="flex w-full sm:w-auto space-x-2 print-hidden">
+        <div className="flex w-full lg:w-auto gap-3 print-hidden">
           <button
             onClick={() => { resetForm(); setShowModal(true); }}
-            className="flex-1 sm:flex-none bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-xl font-bold shadow-lg shadow-emerald-500/20 flex items-center justify-center transition-all uppercase text-[10px] tracking-widest"
+            className="flex-1 lg:flex-none bg-slate-900 hover:bg-black text-white px-8 py-3.5 rounded-2xl font-black shadow-xl shadow-slate-200 flex items-center justify-center transition-all uppercase text-[10px] tracking-[0.15em]"
           >
-            <i className="fas fa-plus mr-2"></i> New Sale
+            <i className="fas fa-plus-circle mr-2 text-blue-400"></i> Create New Invoice
           </button>
         </div>
       </div>
 
 
 
-      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6 filter-bar no-print">
+      <div className="bg-white p-6 rounded-[2rem] border border-slate-200/60 shadow-sm space-y-6 filter-bar no-print ring-4 ring-slate-100/50">
         <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-          <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Transaction Filtering</h4>
+          <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Transaction Filtering & Audit</h4>
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-end">
           <div className="lg:col-span-6">
-            <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Search Records</label>
-            <div className="relative">
+            <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Search Records</label>
+            <div className="relative group">
               <input
                 type="text"
                 placeholder="Search invoice or customer..."
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 pl-11 text-xs focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 pl-12 text-xs focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all shadow-sm"
                 value={searchTerm}
                 onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }}
               />
-              <i className="fas fa-search absolute left-4 top-3.5 text-slate-300"></i>
+              <i className="fas fa-search absolute left-4.5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-blue-500 transition-colors pointer-events-none"></i>
             </div>
           </div>
           <div className="lg:col-span-6 flex flex-col sm:flex-row items-center gap-3">
@@ -395,9 +431,9 @@ const SalesManager: React.FC<Props> = ({ products, customers, transactions, acti
         {/* Desktop Table View */}
         <div className="hidden md:block overflow-x-auto custom-scrollbar">
           <table className="w-full text-left whitespace-nowrap min-w-[600px]">
-            <thead>
-              <tr className="bg-slate-50 border-b border-slate-100">
-                <th className="px-6 py-4 font-bold text-slate-600 text-[10px] uppercase tracking-widest">Invoice</th>
+            <thead className="sticky top-0 z-10">
+              <tr className="bg-slate-50 border-b border-slate-200/60">
+                <th className="px-6 py-5 font-bold text-slate-500 text-[10px] uppercase tracking-widest">Invoice</th>
                 <th className="px-6 py-4 font-bold text-slate-600 text-[10px] uppercase tracking-widest">Customer</th>
                 <th className="px-6 py-4 font-bold text-slate-600 text-[10px] uppercase tracking-widest text-center">Lines</th>
                 <th className="px-6 py-4 font-bold text-slate-600 text-[10px] uppercase tracking-widest text-right">Total</th>
@@ -405,9 +441,9 @@ const SalesManager: React.FC<Props> = ({ products, customers, transactions, acti
                 <th className="px-6 py-4 font-bold text-slate-600 text-[10px] uppercase tracking-widest text-right print:hidden">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-50">
+            <tbody className="divide-y divide-slate-100">
               {paginatedTransactions.map(t => (
-                <tr key={t.id} className="hover:bg-slate-50/50 transition-colors group">
+                <tr key={t.id} className="hover:bg-blue-50/30 transition-colors group even:bg-slate-50/50">
                   <td className="px-6 py-4 font-mono text-xs text-emerald-600 font-bold">{t.invoiceNumber}</td>
                   <td className="px-6 py-4 font-medium text-slate-800 text-sm">{t.entityName}</td>
                   <td className="px-6 py-4 text-center">
@@ -487,73 +523,136 @@ const SalesManager: React.FC<Props> = ({ products, customers, transactions, acti
 
       {
         showModal && (
-          <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md z-[70] flex items-center justify-center p-2 sm:p-4 no-print overflow-y-auto">
+          <div className="fixed inset-0 bg-slate-900/80 z-[70] flex items-center justify-center p-2 sm:p-4 no-print overflow-y-auto">
             <div className="bg-white rounded-3xl w-full max-w-md sm:max-w-lg md:max-w-2xl lg:max-w-4xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 my-8">
-              <div className="bg-slate-50 px-6 sm:px-8 py-4 sm:py-5 border-b border-slate-200 flex justify-between items-center">
+              <div className="bg-white px-8 py-6 border-b border-slate-100 flex justify-between items-center bg-gradient-to-r from-slate-50 to-white">
                 <div>
-                  <h3 className="text-lg sm:text-xl font-bold text-slate-800">{editingTransactionId ? 'Edit Sale' : 'New Sale'}</h3>
-                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Multi-Item Order Entry</p>
+                  <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight">{editingTransactionId ? 'Edit Invoice' : 'New Invoice'}</h3>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em]">Transaction Registry & Itemization</p>
                 </div>
-                <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-600 p-2 transition-colors">
-                  <i className="fas fa-times text-xl"></i>
+                <button onClick={() => setShowModal(false)} className="w-10 h-10 rounded-full bg-slate-100 text-slate-400 hover:bg-red-50 hover:text-red-500 flex items-center justify-center transition-all">
+                  <i className="fas fa-times"></i>
                 </button>
               </div>
-              <form onSubmit={handleSubmit} className="p-4 sm:p-8 space-y-6 max-h-[85vh] overflow-y-auto custom-scrollbar">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 pb-6 border-b border-slate-100">
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-2">Customer</label>
-                    <select required className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                      value={customerId} onChange={e => setCustomerId(e.target.value)}>
-                      <option value="">Select customer...</option>
-                      {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                    </select>
+              <form onSubmit={handleSubmit} className="p-8 space-y-8 max-h-[80vh] overflow-y-auto custom-scrollbar scroll-smooth">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 pb-8 border-b border-slate-100">
+                  <div className="lg:col-span-1">
+                    <SearchableSelect
+                      label="Client Selection *"
+                      placeholder="Search or type new name..."
+                      options={[
+                        ...customers.map(c => ({ id: c.id, name: c.name, subtext: c.gstPanId || 'No GST ID' })),
+                        ...(newCustomerData ? [{ id: '__NEW__', name: newCustomerData.name, subtext: 'QUICK REGISTERING...' }] : [])
+                      ]}
+                      value={customerId || (newCustomerData ? '__NEW__' : '')}
+                      onChange={val => {
+                        setCustomerId(val);
+                        setNewCustomerData(null);
+                      }}
+                      onCustomCreate={name => {
+                        setCustomerId('');
+                        setNewCustomerData({ name, phone: '', gst: '', email: '' });
+                      }}
+                    />
                   </div>
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-2">Invoice No</label>
-                    <input type="text" disabled className="w-full bg-slate-100 text-slate-400 border border-slate-200 rounded-xl px-4 py-3 outline-none cursor-not-allowed font-mono font-bold text-sm"
-                      value={invoiceNumber || (!editingTransactionId ? autoInvoiceNumber : '')} />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-2">Order Date</label>
-                    <input required type="date" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                      value={saleDate} onChange={e => setSaleDate(e.target.value)} />
-                  </div>
+                  {newCustomerData && (
+                    <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-3 animate-in fade-in slide-in-from-left-2 duration-300">
+                      <div>
+                        <label className="block text-[10px] font-bold text-emerald-600 uppercase mb-2 tracking-widest leading-none">Phone</label>
+                        <input
+                          required
+                          type="text"
+                          className="w-full bg-emerald-50/50 border border-emerald-100 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500 text-sm placeholder:text-emerald-200"
+                          placeholder="Phone No"
+                          value={newCustomerData.phone}
+                          onChange={e => setNewCustomerData({ ...newCustomerData, phone: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-emerald-600 uppercase mb-2 tracking-widest leading-none">Email</label>
+                        <input
+                          type="email"
+                          className="w-full bg-emerald-50/50 border border-emerald-100 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500 text-sm placeholder:text-emerald-200"
+                          placeholder="Optional"
+                          value={newCustomerData.email}
+                          onChange={e => setNewCustomerData({ ...newCustomerData, email: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-emerald-600 uppercase mb-2 tracking-widest leading-none">GST/PAN</label>
+                        <input
+                          type="text"
+                          className="w-full bg-emerald-50/50 border border-emerald-100 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500 text-sm placeholder:text-emerald-200"
+                          placeholder="Optional ID"
+                          value={newCustomerData.gst}
+                          onChange={e => setNewCustomerData({ ...newCustomerData, gst: e.target.value })}
+                        />
+                      </div>
+                      <div className="sm:col-span-3 flex items-center space-x-2 bg-emerald-50/30 p-2 rounded-lg border border-emerald-50">
+                        <i className="fas fa-info-circle text-emerald-500 text-xs"></i>
+                        <p className="text-[9px] text-emerald-600 font-bold uppercase tracking-widest">
+                          Registering <strong>{newCustomerData.name}</strong> as a new customer in your system.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                  {!newCustomerData && (
+                    <>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-2">Invoice No</label>
+                        <input type="text" disabled className="w-full bg-slate-100 text-slate-400 border border-slate-200 rounded-xl px-4 py-3 outline-none cursor-not-allowed font-mono font-bold text-sm"
+                          value={invoiceNumber || (!editingTransactionId ? autoInvoiceNumber : '')} />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-2">Billing Date</label>
+                        <input required type="date" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                          value={saleDate} onChange={e => setSaleDate(e.target.value)} />
+                      </div>
+                    </>
+                  )}
+                  {newCustomerData && (
+                    <div className="md:col-span-3 grid grid-cols-2 gap-4 pt-4 border-t border-emerald-50">
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-2">Invoice No</label>
+                        <input type="text" disabled className="w-full bg-slate-100 text-slate-400 border border-slate-200 rounded-xl px-4 py-3 outline-none cursor-not-allowed font-mono font-bold text-sm"
+                          value={invoiceNumber || (!editingTransactionId ? autoInvoiceNumber : '')} />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-2">Billing Date</label>
+                        <input required type="date" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                          value={saleDate} onChange={e => setSaleDate(e.target.value)} />
+                      </div>
+                    </div>
+                  )}
                 </div>
 
-                <div className="space-y-4">
+                <div className="space-y-6">
                   <div className="flex justify-between items-center">
-                    <h4 className="text-xs font-bold text-slate-800 uppercase tracking-widest">Items</h4>
-                    <button type="button" onClick={addLineItem} className="text-[10px] font-bold text-blue-600 hover:text-blue-800 uppercase tracking-widest flex items-center">
-                      <i className="fas fa-plus-circle mr-2"></i> Add Line
+                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Itemized Particulars</h4>
+                    <button type="button" onClick={addLineItem} className="bg-blue-50 text-blue-600 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 hover:text-white transition-all flex items-center shadow-sm">
+                      <i className="fas fa-plus-circle mr-2"></i> Add Product
                     </button>
                   </div>
 
-                  <div className="space-y-3">
+                  <div className="space-y-4">
                     {lineItems.map((item) => {
                       const selectedProduct = products.find(p => p.id === item.productId);
 
                       return (
-                        <div key={item.id} className="bg-slate-50 p-4 rounded-2xl border border-slate-100 relative shadow-sm">
-                          <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
-                            <div className="md:col-span-4">
-                              <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Product</label>
-                              <select
-                                required
-                                className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-xs outline-none transition-all cursor-pointer"
+                        <div key={item.id} className="bg-slate-50/50 p-6 rounded-[1.5rem] border border-slate-100 relative group hover:border-blue-200 transition-all">
+                          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-end">
+                            <div className="lg:col-span-4">
+                              <SearchableSelect
+                                label="Product / Service *"
+                                placeholder="Search inventory..."
+                                options={products.map(p => ({
+                                  id: p.id,
+                                  name: p.name,
+                                  subtext: `STOCK: ${p.stock} | RATE: ${symbol}${p.price}`
+                                }))}
                                 value={item.productId}
-                                onChange={e => updateLineItem(item.id, 'productId', e.target.value)}
-                              >
-                                <option value="">Choose item...</option>
-                                {products.map(p => (
-                                  <option
-                                    key={p.id}
-                                    value={p.id}
-                                    className="text-slate-800"
-                                  >
-                                    {p.name} (Stock: {p.stock})
-                                  </option>
-                                ))}
-                              </select>
+                                onChange={val => updateLineItem(item.id, 'productId', val)}
+                              />
                             </div>
                             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 md:col-span-7 gap-3">
                               <div className="col-span-1">
@@ -613,7 +712,7 @@ const SalesManager: React.FC<Props> = ({ products, customers, transactions, acti
                 <div className="pt-6 border-t border-slate-100 flex flex-col sm:flex-row justify-end gap-3">
                   <button type="button" onClick={() => setShowModal(false)} className="px-6 py-3 font-bold text-slate-400 hover:text-slate-600 uppercase text-[10px] tracking-widest text-center order-2 sm:order-1">Discard</button>
                   <button type="submit" className="bg-emerald-600 hover:bg-emerald-700 text-white px-10 py-3 rounded-2xl font-bold shadow-lg shadow-emerald-500/30 transition-all uppercase text-[10px] tracking-widest text-center order-1 sm:order-2">
-                    {editingTransactionId ? 'Update Record' : 'Post Sale'}
+                    {editingTransactionId ? 'Save Invoice Updates' : 'Finalize & Generate Invoice'}
                   </button>
                 </div>
               </form>

@@ -82,44 +82,45 @@ const Analytics: React.FC<Props> = ({ company, products, transactions }) => {
   const symbol = company.currencySymbol || '$';
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500 pb-20">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-6 rounded-2xl border border-slate-200 shadow-sm gap-4">
+    <div className="space-y-8 animate-in fade-in duration-700 pb-20">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 px-4 md:px-0">
         <div>
-          <h3 className="text-xl font-bold text-slate-800">Financial Reports</h3>
-          <p className="text-sm text-slate-500">Select date ranges and transaction type to generate detailed ledgers</p>
+          <h2 className="text-3xl font-black text-slate-900 tracking-tight mb-1">Business Performance & Ledgers</h2>
+          <p className="text-sm text-slate-500 font-medium">Audit transaction history and export financial statements</p>
         </div>
+        <div className="flex items-center space-x-3 print:hidden">
+
+          <button onClick={handleDownloadReport} className="bg-slate-900 text-white px-8 py-4 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-xl shadow-slate-200 hover:bg-black transition-all flex items-center active:scale-95">
+            <i className="fas fa-file-export mr-2 text-blue-400"></i> Export Statement
+          </button>
+        </div>
+      </div>
+
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-6 rounded-2xl border border-slate-200 shadow-sm gap-4">
         <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2 sm:gap-3 w-full md:w-auto">
-          {/* Transaction Type Filter */}
-          <div className="flex items-center space-x-2 bg-slate-50 p-1.5 rounded-xl border border-slate-200">
+          <div className="flex items-center space-x-2 bg-white px-3 py-2 rounded-xl border border-slate-300 shadow-sm">
             <select 
               value={transactionType}
               onChange={(e) => setTransactionType(e.target.value as 'ALL' | 'PURCHASE' | 'SALE')}
               className="bg-transparent text-xs font-bold outline-none border-none cursor-pointer text-slate-800"
             >
-              <option value="ALL">📊 All Transactions</option>
-              <option value="PURCHASE">📥 Purchase Only</option>
-              <option value="SALE">📤 Sales Only</option>
+              <option value="ALL">📊 All Records</option>
+              <option value="PURCHASE">📥 Purchase Ledger</option>
+              <option value="SALE">📤 Sales Ledger</option>
             </select>
           </div>
 
-          {/* Date Range Filter */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center space-y-2 sm:space-y-0 sm:space-x-2 bg-slate-50 p-2 sm:p-1.5 rounded-xl border border-slate-200 w-full sm:w-auto">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center space-y-2 sm:space-y-0 sm:space-x-2 bg-white px-3 py-2 rounded-xl border border-slate-300 shadow-sm w-full sm:w-auto">
             <input type="date" className="flex-1 sm:flex-none bg-white sm:bg-transparent text-xs font-bold outline-none border sm:border-none rounded-lg sm:rounded-none px-3 py-2 sm:py-0" value={startDate} onChange={e => setStartDate(e.target.value)} />
             <span className="text-slate-300 text-xs text-center">to</span>
             <input type="date" className="flex-1 sm:flex-none bg-white sm:bg-transparent text-xs font-bold outline-none border sm:border-none rounded-lg sm:rounded-none px-3 py-2 sm:py-0" value={endDate} onChange={e => setEndDate(e.target.value)} />
           </div>
-          <button
-            onClick={handleDownloadReport}
-            className="bg-slate-900 hover:bg-black text-white px-5 py-2.5 rounded-xl text-[10px] font-bold flex items-center shadow-lg shadow-slate-200 transition-all uppercase tracking-widest"
-          >
-            <i className="fas fa-file-export mr-2"></i> Export Ledger
-          </button>
         </div>
       </div>
 
       <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
         <div className="px-8 py-6 border-b border-slate-50 flex justify-between items-center bg-slate-50/50">
-          <h4 className="text-sm font-bold text-slate-800 uppercase tracking-widest">Transaction Ledger ({formatDate(startDate)} to {formatDate(endDate)})</h4>
+          <h4 className="text-sm font-bold text-slate-800 uppercase tracking-widest">Historical Transaction Audit ({formatDate(startDate)} to {formatDate(endDate)})</h4>
           <div className="text-[10px] font-bold text-slate-400">Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, filteredTransactions.length)} of {filteredTransactions.length} entries</div>
         </div>
         <div className="overflow-x-auto">
@@ -164,7 +165,6 @@ const Analytics: React.FC<Props> = ({ company, products, transactions }) => {
           </table>
         </div>
 
-        {/* Pagination Controls */}
         <div className="flex flex-col sm:flex-row justify-between items-center gap-4 px-8 py-6 bg-slate-50/50 border-t border-slate-50">
           <div className="flex items-center space-x-2">
             <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Items per page:</label>
