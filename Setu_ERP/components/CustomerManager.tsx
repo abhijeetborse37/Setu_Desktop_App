@@ -97,47 +97,54 @@ const CustomerManager: React.FC<Props> = ({ customers, onDataChange, activeCompa
   };
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
-      <div className="flex flex-col lg:flex-row justify-between lg:items-center gap-8 px-8 py-10 bg-white rounded-[2.5rem] border border-slate-200 shadow-sm ring-4 ring-slate-100/50">
-        <div className="flex-1">
-          <h1 className="text-3xl font-black text-slate-900 tracking-tight mb-2">CRM & Client Registry</h1>
-          <p className="text-[10px] text-slate-400 font-bold tracking-[0.2em] mb-8">Centralized Customer Profile Management</p>
-
-          <div className="flex flex-col sm:flex-row items-center gap-4">
-            <div className="relative w-full sm:w-80 group">
-              <input
-                type="text"
-                placeholder="Search profiles..."
-                className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 px-5 pl-12 text-sm font-bold text-slate-800 focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 outline-none transition-all shadow-sm"
-                value={searchTerm}
-                onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }}
-              />
-              <i className="fas fa-search absolute left-5 top-4.5 text-slate-300 group-focus-within:text-blue-500 transition-colors"></i>
-            </div>
-
-            <div className="flex items-center space-x-1 bg-slate-100/30 p-1.5 rounded-2xl border border-slate-200/60 w-full sm:w-auto overflow-x-auto no-scrollbar">
-              {['ALL', CustomerGroup.REGULAR, CustomerGroup.VIP, CustomerGroup.NEW].map(group => (
-                <button
-                  key={group}
-                  onClick={() => { setFilterGroup(group as any); setCurrentPage(1); }}
-                  className={`px-5 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-[0.15em] whitespace-nowrap transition-all ${filterGroup === group ? 'bg-slate-900 text-white shadow-xl' : 'text-slate-400 hover:text-slate-700'}`}
-                >
-                  {group === 'ALL' ? 'Registry Total' : group}
-                </button>
-              ))}
-            </div>
-          </div>
+    <div className="space-y-6 animate-in slide-in-from-bottom-2 duration-300">
+      <div className="flex flex-col lg:flex-row justify-between lg:items-center gap-6">
+        <div>
+          <h1 className="text-3xl font-black text-slate-900 tracking-tight">CRM & Client Registry</h1>
+          <p className="text-[10px] text-slate-400 font-bold tracking-[0.2em]">Centralized Customer Profile Management</p>
         </div>
-
-        <button
-          onClick={() => { resetForm(); setShowForm(true); }}
-          className="w-full lg:w-auto bg-blue-600 hover:bg-blue-700 text-white px-10 py-5 rounded-[1.8rem] font-black shadow-2xl shadow-blue-500/20 transition-all flex items-center justify-center text-[10px] uppercase tracking-[0.2em] active:scale-95 flex-shrink-0"
-        >
-          <i className="fas fa-user-plus mr-3 text-sm"></i> Register New Client
-        </button>
+        <div className="flex w-full lg:w-auto gap-3 print-hidden">
+          <button
+            onClick={() => { resetForm(); setShowForm(true); }}
+            className="flex-1 lg:flex-none bg-blue-600 hover:bg-blue-700 text-white px-8 py-3.5 rounded-2xl font-black shadow-xl shadow-blue-500/20 flex items-center justify-center transition-all uppercase text-[10px] tracking-[0.15em]"
+          >
+            <i className="fas fa-user-plus mr-2"></i> Register New Client
+          </button>
+        </div>
       </div>
 
-      <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm overflow-hidden ring-4 ring-slate-100/50">
+      <div className="bg-white p-6 rounded-[2rem] border border-slate-200/60 shadow-sm space-y-6 filter-bar no-print ring-4 ring-slate-100/50">
+        <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+          <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Client Registry Filter</h4>
+        </div>
+
+        <div className="flex flex-col lg:flex-row items-center gap-6">
+          <div className="relative w-full lg:w-96 group">
+            <input
+              type="text"
+              placeholder="Search profiles by name, phone or email..."
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 pl-12 text-xs focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all shadow-sm"
+              value={searchTerm}
+              onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+            />
+            <i className="fas fa-search absolute left-4.5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-blue-500 transition-colors pointer-events-none"></i>
+          </div>
+
+          <div className="flex items-center space-x-1 bg-slate-100/30 p-1.5 rounded-2xl border border-slate-200/60 w-full lg:w-auto overflow-x-auto no-scrollbar">
+            {['ALL', CustomerGroup.REGULAR, CustomerGroup.VIP, CustomerGroup.NEW].map(group => (
+              <button
+                key={group}
+                onClick={() => { setFilterGroup(group as any); setCurrentPage(1); }}
+                className={`px-5 py-2 rounded-[14px] text-[9px] font-black uppercase tracking-[0.15em] whitespace-nowrap transition-all ${filterGroup === group ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-400 hover:text-slate-700'}`}
+              >
+                {group === 'ALL' ? 'Show All' : group}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden ring-4 ring-slate-100/50">
         <div className="overflow-x-auto custom-scrollbar">
           <table className="w-full text-left border-collapse min-w-[1000px]">
             <thead>
@@ -203,41 +210,43 @@ const CustomerManager: React.FC<Props> = ({ customers, onDataChange, activeCompa
           </table>
         </div>
 
-        {/* Improved Pagination inside table container footer */}
-        <div className="bg-slate-50/50 p-6 border-t border-slate-100 flex flex-col sm:flex-row justify-between items-center gap-6">
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center">
-            <i className="fas fa-database mr-3 text-blue-400"></i>
-            Audit View: Page {currentPage} of {totalPages || 1} • {customers.length} Entries
-          </p>
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-              disabled={currentPage === 1}
-              className="px-6 py-3 bg-white border border-slate-200 rounded-2xl text-[10px] font-black text-slate-400 hover:text-blue-600 hover:border-blue-200 disabled:opacity-30 transition-all uppercase tracking-widest shadow-sm active:scale-95"
-            >
-              Previous
-            </button>
-            <div className="flex items-center space-x-1 px-4">
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map(pageNum => (
-                <button
-                  key={pageNum}
-                  onClick={() => setCurrentPage(pageNum)}
-                  className={`w-10 h-10 rounded-xl text-[10px] font-black transition-all ${currentPage === pageNum ? 'bg-blue-600 text-white shadow-xl shadow-blue-500/30' : 'bg-white text-slate-400 hover:bg-slate-50'}`}
-                >
-                  {pageNum}
-                </button>
-              ))}
-            </div>
-            <button
-              onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-              disabled={currentPage === totalPages || totalPages === 0}
-              className="px-6 py-3 bg-white border border-slate-200 rounded-2xl text-[10px] font-black text-slate-400 hover:text-blue-600 hover:border-blue-200 disabled:opacity-30 transition-all uppercase tracking-widest shadow-sm active:scale-95"
-            >
-              Next
-            </button>
+      </div>
+      
+      {/* Pagination Controls matched with other managers */}
+      <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mt-6 no-print">
+        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center">
+          <i className="fas fa-database mr-3 text-blue-400"></i>
+          Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, customers.length)} of {customers.length} entries
+        </p>
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+            disabled={currentPage === 1}
+            className="px-5 py-2.5 bg-white border border-slate-200 rounded-xl text-[10px] font-black text-slate-400 hover:text-blue-600 hover:border-blue-200 disabled:opacity-30 transition-all uppercase tracking-widest shadow-sm active:scale-95"
+          >
+            Previous
+          </button>
+          <div className="flex space-x-1 px-1">
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map(pageNum => (
+              <button
+                key={pageNum}
+                onClick={() => setCurrentPage(pageNum)}
+                className={`w-9 h-9 rounded-xl text-[10px] font-black transition-all ${currentPage === pageNum ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' : 'bg-white border border-slate-100 text-slate-400 hover:bg-slate-50'}`}
+              >
+                {pageNum}
+              </button>
+            ))}
           </div>
+          <button
+            onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+            disabled={currentPage === totalPages || totalPages === 0}
+            className="px-5 py-2.5 bg-white border border-slate-200 rounded-xl text-[10px] font-black text-slate-400 hover:text-blue-600 hover:border-blue-200 disabled:opacity-30 transition-all uppercase tracking-widest shadow-sm active:scale-95"
+          >
+            Next
+          </button>
         </div>
       </div>
+
 
       {showForm && (
         <div className="fixed inset-0 bg-slate-900/80 z-[70] flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
