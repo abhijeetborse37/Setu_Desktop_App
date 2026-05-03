@@ -67,13 +67,13 @@ const StatCard: React.FC<{ title: string; value: number | string; icon: string; 
     purple: 'bg-purple-50 text-purple-600',
   };
   return (
-    <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm flex items-center gap-5">
-      <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-xl shadow-sm flex-shrink-0 ${colors[color] || colors.blue}`}>
+    <div className="bg-white p-4 sm:p-6 rounded-2xl sm:rounded-[2rem] border border-slate-200 shadow-sm flex items-center gap-3 sm:gap-5">
+      <div className={`w-10 h-10 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl flex items-center justify-center text-lg sm:text-xl shadow-sm flex-shrink-0 ${colors[color] || colors.blue}`}>
         <i className={`fas ${icon}`}></i>
       </div>
-      <div>
-        <h4 className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">{title}</h4>
-        <p className="text-3xl font-black text-slate-900 tracking-tighter">{value}</p>
+      <div className="min-w-0">
+        <h4 className="text-[8px] sm:text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-0.5 sm:mb-1 truncate">{title}</h4>
+        <p className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tighter">{value}</p>
       </div>
     </div>
   );
@@ -122,7 +122,8 @@ const AdminPanel: React.FC = () => {
     revenue: 0,
     expenses: 0,
     incorporationDate: new Date().toISOString().split('T')[0],
-    website: ''
+    website: '',
+    supplierName: ''
   });
   const [bankValidationErrors, setBankValidationErrors] = useState<any>({});
   const [businessFormError, setBusinessFormError] = useState('');
@@ -137,6 +138,59 @@ const AdminPanel: React.FC = () => {
   // Plan management
   const [showPlanForm, setShowPlanForm] = useState(false);
   const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
+
+  // Customer Management
+  const [showCustomerModal, setShowCustomerModal] = useState(false);
+  const [editingCustomer, setEditingCustomer] = useState<any | null>(null);
+  const [customerForm, setCustomerForm] = useState({
+    name: '',
+    email: '',
+    contactNo: '',
+    allowedTabsPattern: '*'
+  });
+  const [customerFormLoading, setCustomerFormLoading] = useState(false);
+  const [customerFormError, setCustomerFormError] = useState('');
+
+  const handleDeleteCustomer = async (userId: string) => {
+    if (!window.confirm('WARNING: This will permanently delete the customer and ALL their associated data (Companies, Products, Transactions). This action cannot be undone. Proceed?')) return;
+    try {
+      await adminService.deleteUser(userId);
+      fetchData();
+    } catch (err: any) {
+      alert(err?.response?.data?.message || 'Failed to delete customer.');
+    }
+  };
+
+  const handleEditCustomer = (customer: any) => {
+    setEditingCustomer(customer);
+    setCustomerForm({
+      name: customer.name || '',
+      email: customer.email || '',
+      contactNo: customer.contactNo || '',
+      allowedTabsPattern: customer.allowedTabsPattern || '*'
+    });
+    setCustomerFormError('');
+    setShowCustomerModal(true);
+  };
+
+  const handleUpdateCustomer = async () => {
+    if (!customerForm.name || !customerForm.email) {
+      setCustomerFormError('Name and Email are required.');
+      return;
+    }
+    setCustomerFormLoading(true);
+    try {
+      await adminService.updateUser(editingCustomer.id, customerForm);
+      setShowCustomerModal(false);
+      fetchData();
+    } catch (err: any) {
+      const errorMsg = err?.response?.data?.message || err?.response?.data || err.message || 'Failed to update customer details.';
+      setCustomerFormError(errorMsg);
+      console.error('Update Error:', err);
+    } finally {
+      setCustomerFormLoading(false);
+    }
+  };
   const [planFormData, setPlanFormData] = useState<any>({
     name: '',
     description: '',
@@ -336,6 +390,7 @@ const AdminPanel: React.FC = () => {
       employees: Number(businessFormData.employees) || 0,
       revenue: Number(businessFormData.revenue) || 0,
       expenses: Number(businessFormData.expenses) || 0,
+      supplierName: businessFormData.supplierName || ''
     };
 
     setBusinessFormLoading(true);
@@ -395,7 +450,8 @@ const AdminPanel: React.FC = () => {
       revenue: company.revenue,
       expenses: company.expenses,
       incorporationDate: company.incorporationDate ? new Date(company.incorporationDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-      website: company.website || ''
+      website: company.website || '',
+      supplierName: company.supplierName || ''
     });
 
     setBankValidationErrors({});
@@ -584,13 +640,14 @@ const AdminPanel: React.FC = () => {
           <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight uppercase">Admin Portal</h1>
           <p className="text-[9px] sm:text-[10px] text-slate-500 font-bold uppercase tracking-[0.2em]">Platform Management &amp; Control</p>
         </div>
-        <div className="flex flex-row flex-wrap items-center justify-start gap-2 bg-white p-1 rounded-2xl border border-slate-200 shadow-sm w-fit max-w-full">
+        <div className="flex flex-row items-center gap-1 bg-white p-1 rounded-2xl border border-slate-200 shadow-sm overflow-x-auto no-scrollbar max-w-full flex-shrink-0">
           {(['dashboard', 'subscriptions', 'plans', 'businesses'] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveSubTab(tab)}
-              className={`px-3 sm:px-4 py-2 rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all text-center ${activeSubTab === tab ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-400 hover:text-slate-600'
-                }`}
+              className={`flex-shrink-0 px-3 sm:px-4 py-2 rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all text-center whitespace-nowrap ${
+                activeSubTab === tab ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-400 hover:text-slate-600'
+              }`}
             >
               {tab === 'dashboard' ? 'Overview' : tab === 'businesses' ? 'Businesses' : tab}
             </button>
@@ -623,16 +680,93 @@ const AdminPanel: React.FC = () => {
                 <i className="fas fa-plus"></i> Assign Subscription
               </button>
             </div>
-            <div className="overflow-x-auto">
+            {/* ── MOBILE CARD VIEW (< md) ── */}
+            <div className="md:hidden divide-y divide-slate-100">
+              {customerUsers.length === 0 && (
+                <div className="p-8 text-center text-slate-400 font-bold uppercase text-[10px] tracking-widest">No customers yet</div>
+              )}
+              {customerUsers.map((u) => {
+                const planStatus = getPlanStatus(u.subscription);
+                return (
+                  <div key={u.id} className={`p-4 space-y-3 transition-colors ${planStatus.status === 'expired' ? 'bg-red-50/30' : planStatus.status === 'expiring-soon' ? 'bg-amber-50/20' : ''}`}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-emerald-500 flex items-center justify-center font-black text-white text-[10px] flex-shrink-0">
+                          {u.name?.substring(0, 2).toUpperCase()}
+                        </div>
+                        <div className="truncate max-w-[150px]">
+                          <p className="font-bold text-slate-800 text-sm truncate">{u.name}</p>
+                          <p className="text-[10px] text-slate-400 truncate">{u.email}</p>
+                        </div>
+                      </div>
+                      <span className={`text-[8px] font-black px-2 py-1 rounded-lg uppercase tracking-widest ${planStatus.status === 'expired' ? 'bg-red-50 text-red-600'
+                          : planStatus.status === 'expiring-soon' ? 'bg-amber-50 text-amber-600'
+                            : planStatus.status === 'active' ? 'bg-emerald-50 text-emerald-600'
+                              : planStatus.status === 'pending' ? 'bg-amber-50 text-amber-600'
+                                : 'bg-slate-100 text-slate-400'
+                        }`}>
+                        {planStatus.label}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4 text-[10px]">
+                       <div>
+                         <p className="text-slate-400 font-bold uppercase tracking-widest mb-1">Plan</p>
+                         <p className="font-black text-slate-700">{u.subscription?.planName || 'None'}</p>
+                       </div>
+                       <div>
+                         <p className="text-slate-400 font-bold uppercase tracking-widest mb-1">Expiry</p>
+                         <p className="font-bold text-slate-500">{u.subscription?.endDate ? formatDisplayDate(u.subscription.endDate) : '—'}</p>
+                       </div>
+                    </div>
+
+                    <div className="space-y-2 pt-2">
+                      <div className="flex gap-2">
+                         <button
+                           onClick={() => { setInvoiceUser(u); }}
+                           disabled={!u.subscription}
+                           className="flex-1 bg-blue-50 text-blue-600 py-2.5 rounded-xl font-black text-[9px] uppercase tracking-widest disabled:opacity-30"
+                         >
+                           Invoice
+                         </button>
+                         <button
+                           onClick={() => handleOpenSubForm(u)}
+                           className="flex-1 bg-emerald-50 text-emerald-600 py-2.5 rounded-xl font-black text-[9px] uppercase tracking-widest"
+                         >
+                           Manage
+                         </button>
+                      </div>
+                      <div className="flex gap-2">
+                         <button
+                           onClick={() => handleEditCustomer(u)}
+                           className="flex-1 bg-amber-50 text-amber-600 py-2.5 rounded-xl font-black text-[9px] uppercase tracking-widest"
+                         >
+                           Edit
+                         </button>
+                         <button
+                           onClick={() => handleDeleteCustomer(u.id)}
+                           className="flex-1 bg-red-50 text-red-600 py-2.5 rounded-xl font-black text-[9px] uppercase tracking-widest"
+                         >
+                           Delete
+                         </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* ── DESKTOP TABLE VIEW (md+) ── */}
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left">
                 <thead>
                   <tr className="bg-slate-50 text-[10px] font-black text-slate-400 uppercase tracking-widest">
                     <th className="px-6 py-4">Customer</th>
-                    <th className="px-6 py-4 hidden md:table-cell">Contact</th>
+                    <th className="px-6 py-4 hidden lg:table-cell">Contact</th>
                     <th className="px-6 py-4">Plan</th>
                     <th className="px-6 py-4">Start Date</th>
                     <th className="px-6 py-4">Status</th>
-                    <th className="px-6 py-4 hidden lg:table-cell">Expiry</th>
+                    <th className="px-6 py-4 hidden xl:table-cell">Expiry</th>
                     <th className="px-6 py-4 text-right">Actions</th>
                   </tr>
                 </thead>
@@ -652,7 +786,7 @@ const AdminPanel: React.FC = () => {
                             </div>
                           </div>
                         </td>
-                        <td className="px-6 py-4 hidden md:table-cell">
+                        <td className="px-6 py-4 hidden lg:table-cell">
                           <p className="text-xs text-slate-600">{u.contactNo || '—'}</p>
                         </td>
                         <td className="px-6 py-4">
@@ -671,7 +805,7 @@ const AdminPanel: React.FC = () => {
                             {planStatus.label}
                           </span>
                         </td>
-                        <td className="px-6 py-4 hidden lg:table-cell">
+                        <td className="px-6 py-4 hidden xl:table-cell">
                           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">
                             {u.subscription?.endDate ? formatDisplayDate(u.subscription.endDate) : '—'}
                           </p>
@@ -693,13 +827,27 @@ const AdminPanel: React.FC = () => {
                             >
                               <i className="fas fa-sync-alt"></i>
                             </button>
+                            <button
+                              onClick={() => handleEditCustomer(u)}
+                              className="p-2 bg-amber-50 text-amber-600 rounded-lg hover:bg-amber-100 transition-all text-xs"
+                              title="Edit Customer Details"
+                            >
+                              <i className="fas fa-edit"></i>
+                            </button>
+                            <button
+                              onClick={() => handleDeleteCustomer(u.id)}
+                              className="p-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-all text-xs"
+                              title="Delete Customer"
+                            >
+                              <i className="fas fa-trash"></i>
+                            </button>
                           </div>
                         </td>
                       </tr>
                     );
                   })}
                   {customerUsers.length === 0 && (
-                    <tr><td colSpan={6} className="py-12 text-center text-slate-400 font-bold uppercase text-[10px] tracking-widest">No customers yet</td></tr>
+                    <tr><td colSpan={7} className="py-12 text-center text-slate-400 font-bold uppercase text-[10px] tracking-widest">No customers yet</td></tr>
                   )}
                 </tbody>
               </table>
@@ -720,7 +868,31 @@ const AdminPanel: React.FC = () => {
               {pendingSubs.length} Pending
             </span>
           </div>
-          <div className="overflow-x-auto">
+          {/* ── MOBILE CARD VIEW (< md) ── */}
+          <div className="md:hidden divide-y divide-slate-100">
+            {pendingSubs.length === 0 ? (
+              <div className="px-6 py-12 text-center text-slate-400 font-bold uppercase text-[10px] tracking-widest">No pending requests</div>
+            ) : (
+              pendingSubs.map((sub) => (
+                <div key={sub.id} className="p-4 space-y-3">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="text-sm font-bold text-slate-800 uppercase tracking-tight">{sub.userName}</p>
+                      <p className="text-[10px] text-slate-400 font-mono mt-0.5">{sub.userId}</p>
+                    </div>
+                    <span className="text-xs font-black text-blue-600 uppercase tracking-widest">{sub.planName}</span>
+                  </div>
+                  <div className="flex gap-2 pt-2">
+                    <button onClick={() => handleReject(sub.id)} className="flex-1 py-2.5 bg-red-50 text-red-600 rounded-xl text-[9px] font-black uppercase tracking-widest">Reject</button>
+                    <button onClick={() => handleApprove(sub.id)} className="flex-1 py-2.5 bg-emerald-50 text-emerald-600 rounded-xl text-[9px] font-black uppercase tracking-widest">Approve</button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* ── DESKTOP TABLE VIEW (md+) ── */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-left">
               <thead>
                 <tr className="bg-slate-50 text-[10px] font-black text-slate-400 uppercase tracking-widest">
@@ -760,7 +932,7 @@ const AdminPanel: React.FC = () => {
       {/* PLANS TAB */}
       {activeSubTab === 'plans' && (
         <div className="space-y-6">
-          <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm p-6">
+          <div className="bg-white rounded-2xl sm:rounded-[2rem] border border-slate-200 shadow-sm p-4 sm:p-6">
             <div className="flex items-center justify-between mb-6">
               <div>
                 <h3 className="font-black text-slate-800 uppercase tracking-tight">Subscription Plans</h3>
@@ -775,16 +947,16 @@ const AdminPanel: React.FC = () => {
                   });
                   setShowPlanForm(true);
                 }}
-                className="bg-blue-600 text-white px-6 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-blue-500/20 flex items-center gap-2"
+                className="bg-blue-600 text-white px-5 sm:px-6 py-2.5 sm:py-3 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-blue-500/20 flex items-center gap-2"
               >
-                <i className="fas fa-plus"></i> New Plan
+                <i className="fas fa-plus"></i> <span className="hidden sm:inline">New Plan</span>
               </button>
             </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {plans.map((p) => (
-              <div key={p.id} className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm relative group hover:border-blue-300 transition-all">
+              <div key={p.id} className="bg-white p-6 sm:p-8 rounded-[2rem] sm:rounded-[2.5rem] border border-slate-200 shadow-sm relative group hover:border-blue-300 transition-all">
                 <div className="flex justify-between items-start mb-6">
                   <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">{p.name}</h3>
                   <span className={`text-[9px] font-black px-2 py-0.5 rounded uppercase tracking-widest ${p.status === 'Active' ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}>
@@ -843,11 +1015,11 @@ const AdminPanel: React.FC = () => {
       {/* BUSINESSES TAB */}
       {activeSubTab === 'businesses' && (
         <div className="space-y-6">
-          <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm p-6">
-            <div className="flex items-center justify-between ml-0 mb-6">
-              <div>
-                <h3 className="font-black text-slate-800 uppercase tracking-tight">Businesses</h3>
-                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">List, filter, edit and delete businesses</p>
+          <div className="bg-white rounded-2xl sm:rounded-[2rem] border border-slate-200 shadow-sm p-4 sm:p-6">
+            <div className="flex items-center justify-between mb-6">
+              <div className="truncate pr-2">
+                <h3 className="font-black text-slate-800 uppercase tracking-tight truncate">Businesses</h3>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest truncate">Manage platform enterprises</p>
               </div>
               <button
                 onClick={() => {
@@ -856,61 +1028,130 @@ const AdminPanel: React.FC = () => {
                   setEditingCompanyId(null);
                   setBusinessFormError('');
                 }}
-                className="bg-blue-600 text-white px-6 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-blue-500/20 flex items-center gap-2"
+                className="bg-blue-600 text-white px-5 sm:px-6 py-2.5 sm:py-3 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-blue-500/20 flex items-center gap-2 whitespace-nowrap"
               >
-                <i className="fas fa-plus"></i> New Business
+                <i className="fas fa-plus"></i> <span className="hidden sm:inline">New Business</span>
               </button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
               <div>
-                <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Customer</label>
-                <input
-                  type="text"
-                  value={companyFilter.owner}
-                  onChange={(e) => setCompanyFilter((prev) => ({ ...prev, owner: e.target.value }))}
-                  placeholder="Search by customer name"
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm"
-                />
+                <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">Customer</label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={companyFilter.owner}
+                    onChange={(e) => setCompanyFilter((prev) => ({ ...prev, owner: e.target.value }))}
+                    placeholder="Search customer"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs outline-none focus:ring-2 focus:ring-blue-500/20"
+                  />
+                </div>
               </div>
               <div>
-                <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Business Name</label>
-                <input
-                  type="text"
-                  value={companyFilter.name}
-                  onChange={(e) => setCompanyFilter((prev) => ({ ...prev, name: e.target.value }))}
-                  placeholder="Search by business name"
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm"
-                />
+                <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">Business Name</label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={companyFilter.name}
+                    onChange={(e) => setCompanyFilter((prev) => ({ ...prev, name: e.target.value }))}
+                    placeholder="Search business"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs outline-none focus:ring-2 focus:ring-blue-500/20"
+                  />
+                </div>
               </div>
-              <div>
-                <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Tax ID</label>
-                <input
-                  type="text"
-                  value={companyFilter.taxId}
-                  onChange={(e) => setCompanyFilter((prev) => ({ ...prev, taxId: e.target.value }))}
-                  placeholder="Search by Tax ID"
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm"
-                />
+              <div className="sm:col-span-2 lg:col-span-1">
+                <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1 ml-1">Tax ID / PAN</label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={companyFilter.taxId}
+                    onChange={(e) => setCompanyFilter((prev) => ({ ...prev, taxId: e.target.value }))}
+                    placeholder="Search Tax ID"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs outline-none focus:ring-2 focus:ring-blue-500/20"
+                  />
+                </div>
               </div>
             </div>
 
-            <div className="overflow-auto border border-slate-200 rounded-xl p-1">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-slate-100 text-slate-600">
+            {/* ── MOBILE CARD VIEW (< lg) ── */}
+            <div className="lg:hidden space-y-4 mb-6">
+              {paginatedCompanies.length === 0 ? (
+                <div className="p-8 text-center text-slate-400 font-bold uppercase text-[10px] tracking-widest bg-slate-50 rounded-2xl">No businesses found.</div>
+              ) : (
+                paginatedCompanies.map((company) => {
+                  const owner = users.find((u) => u.id === company.userId)?.name || 'Unknown';
+                  const typeLabels: Record<string, string> = {
+                    'PrivateLimited': 'Private Limited',
+                    'PublicLimited': 'Public Limited',
+                    'Proprietorship': 'Proprietorship / Firm',
+                    'Partnership': 'Partnership',
+                    'Ngo': 'NGO'
+                  };
+                  const typeVal = String(company.type);
+                  const typeText = typeLabels[typeVal] || (BUSINESS_TYPE_TO_STRING[Number(typeVal)] ? typeLabels[BUSINESS_TYPE_TO_STRING[Number(typeVal)]] : typeVal || 'Unknown');
+                  
+                  return (
+                    <div key={company.id} className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm space-y-3">
+                      <div className="flex justify-between items-start border-b border-slate-50 pb-3">
+                        <div>
+                          <p className="font-black text-slate-800 uppercase tracking-tight leading-none mb-1">{company.name}</p>
+                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
+                            <i className="fas fa-user mr-1 opacity-50"></i> {owner}
+                          </p>
+                        </div>
+                        <span className="text-[8px] font-black bg-blue-50 text-blue-600 px-2 py-1 rounded-md uppercase tracking-widest">
+                          {typeText}
+                        </span>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-4 text-[10px]">
+                        <div>
+                          <p className="text-slate-400 font-bold uppercase tracking-widest mb-0.5">Tax ID</p>
+                          <p className="font-mono font-bold text-slate-700">{company.taxId}</p>
+                        </div>
+                        <div>
+                          <p className="text-slate-400 font-bold uppercase tracking-widest mb-0.5">Contact</p>
+                          <p className="font-bold text-slate-700">{company.contact}</p>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2 pt-1">
+                        <button
+                          onClick={() => handleEditCompany(company)}
+                          className="flex-1 py-2.5 bg-blue-50 text-blue-600 rounded-xl text-[9px] font-black uppercase tracking-widest"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDeleteCompany(company.id)}
+                          className="flex-1 py-2.5 bg-red-50 text-red-600 rounded-xl text-[9px] font-black uppercase tracking-widest"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* ── DESKTOP TABLE VIEW (lg+) ── */}
+            <div className="hidden lg:block overflow-auto border border-slate-100 rounded-[1.5rem] p-1 mb-6">
+              <table className="w-full text-left">
+                <thead className="bg-slate-50 text-slate-500 uppercase text-[9px] font-black tracking-widest">
                   <tr>
-                    <th className="px-3 py-2">Business Name</th>
-                    <th className="px-3 py-2">Customer</th>
-                    <th className="px-3 py-2">Tax ID</th>
-                    <th className="px-3 py-2">Entity Structure</th>
-                    <th className="px-3 py-2">Contact</th>
-                    <th className="px-3 py-2">Actions</th>
+                    <th className="px-5 py-4">Business Name</th>
+                    <th className="px-5 py-4">Customer</th>
+                    <th className="px-5 py-4">Tax ID</th>
+                    <th className="px-5 py-4">Structure</th>
+                    <th className="px-5 py-4">Contact</th>
+                    <th className="px-5 py-4 text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="divide-y divide-slate-100">
                   {paginatedCompanies.length === 0 ? (
                     <tr>
-                      <td className="px-3 py-4 text-slate-500" colSpan={6}>No businesses found.</td>
+                      <td className="px-5 py-8 text-center text-slate-400 font-bold uppercase text-[10px] tracking-widest" colSpan={6}>No businesses found.</td>
                     </tr>
                   ) : (
                     paginatedCompanies.map((company) => {
@@ -925,25 +1166,29 @@ const AdminPanel: React.FC = () => {
                       const typeVal = String(company.type);
                       const typeText = typeLabels[typeVal] || (BUSINESS_TYPE_TO_STRING[Number(typeVal)] ? typeLabels[BUSINESS_TYPE_TO_STRING[Number(typeVal)]] : typeVal || 'Unknown');
                       return (
-                        <tr key={company.id} className="border-t border-slate-100 hover:bg-slate-50">
-                          <td className="px-3 py-3 font-bold text-slate-800">{company.name}</td>
-                          <td className="px-3 py-3">{owner}</td>
-                          <td className="px-3 py-3">{company.taxId}</td>
-                          <td className="px-3 py-3">{typeText}</td>
-                          <td className="px-3 py-3">{company.contact}</td>
-                          <td className="px-3 py-3 space-x-2">
-                            <button
-                              onClick={() => handleEditCompany(company)}
-                              className="px-2 py-1 text-[10px] bg-blue-50 text-blue-600 rounded-lg font-black uppercase tracking-widest"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => handleDeleteCompany(company.id)}
-                              className="px-2 py-1 text-[10px] bg-red-50 text-red-600 rounded-lg font-black uppercase tracking-widest"
-                            >
-                              Delete
-                            </button>
+                        <tr key={company.id} className="hover:bg-slate-50/50 transition-colors">
+                          <td className="px-5 py-4 font-black text-slate-800 uppercase tracking-tight">{company.name}</td>
+                          <td className="px-5 py-4 text-xs font-bold text-slate-500">{owner}</td>
+                          <td className="px-5 py-4 text-xs font-mono font-bold text-blue-600">{company.taxId}</td>
+                          <td className="px-5 py-4">
+                            <span className="text-[9px] font-black bg-slate-100 text-slate-500 px-2 py-1 rounded-md uppercase tracking-widest whitespace-nowrap">{typeText}</span>
+                          </td>
+                          <td className="px-5 py-4 text-xs font-bold text-slate-600">{company.contact}</td>
+                          <td className="px-5 py-4 text-right">
+                            <div className="flex justify-end gap-1.5">
+                              <button
+                                onClick={() => handleEditCompany(company)}
+                                className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                              >
+                                <i className="fas fa-edit"></i>
+                              </button>
+                              <button
+                                onClick={() => handleDeleteCompany(company.id)}
+                                className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                              >
+                                <i className="fas fa-trash-alt"></i>
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -953,19 +1198,21 @@ const AdminPanel: React.FC = () => {
               </table>
             </div>
 
-            <div className="flex items-center justify-between text-[10px] text-slate-500 mt-3">
-              <span>Showing {Math.min(filteredCompanies.length, (companyPage - 1) * companyPageSize + 1)} to {Math.min(filteredCompanies.length, companyPage * companyPageSize)} of {filteredCompanies.length}</span>
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 text-[10px] text-slate-500 mt-4 pt-4 border-t border-slate-100">
+              <span className="font-bold uppercase tracking-widest">
+                Showing {Math.min(filteredCompanies.length, (companyPage - 1) * companyPageSize + 1)}–{Math.min(filteredCompanies.length, companyPage * companyPageSize)} of {filteredCompanies.length}
+              </span>
               <div className="inline-flex items-center gap-2">
                 <button
                   disabled={companyPage <= 1}
                   onClick={() => setCompanyPage((p) => Math.max(1, p - 1))}
-                  className="px-3 py-1 rounded-lg border border-slate-200 bg-white disabled:opacity-40"
+                  className="px-4 py-2 rounded-xl border border-slate-200 bg-white font-black uppercase tracking-widest disabled:opacity-40 hover:bg-slate-50 transition-colors"
                 >Prev</button>
-                <span>Page {companyPage}/{totalCompanyPages}</span>
+                <span className="font-bold">Page {companyPage}/{totalCompanyPages}</span>
                 <button
                   disabled={companyPage >= totalCompanyPages}
                   onClick={() => setCompanyPage((p) => Math.min(totalCompanyPages, p + 1))}
-                  className="px-3 py-1 rounded-lg border border-slate-200 bg-white disabled:opacity-40"
+                  className="px-4 py-2 rounded-xl border border-slate-200 bg-white font-black uppercase tracking-widest disabled:opacity-40 hover:bg-slate-50 transition-colors"
                 >Next</button>
               </div>
             </div>
@@ -1185,12 +1432,12 @@ const AdminPanel: React.FC = () => {
         <div className="fixed inset-0 bg-slate-900/80 z-[100] flex items-start justify-center p-2 sm:p-4 overflow-y-auto backdrop-blur-sm scroll-smooth">
           <div className="relative bg-white rounded-[2rem] w-full max-w-md sm:max-w-lg md:max-w-3xl shadow-2xl overflow-hidden my-auto pointer-events-auto ring-1 ring-white/50">
             <div className="h-1.5 bg-gradient-to-r from-emerald-600 to-blue-600"></div>
-            <div className="p-4 sm:p-10">
-              <h1 className="text-3xl font-black text-slate-900 mb-1 uppercase tracking-tight">Register Business</h1>
-              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em] mb-10">Corporate Entity Registry & Compliance</p>
+            <div className="p-4 sm:p-8 md:p-10">
+              <h1 className="text-2xl sm:text-3xl font-black text-slate-900 mb-1 uppercase tracking-tight">Register Business</h1>
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em] mb-6 sm:mb-10">Corporate Entity Registry & Compliance</p>
 
               <div className="space-y-6">
-                <div className="max-h-[60vh] overflow-y-auto pr-2 space-y-8 custom-scrollbar">
+                <div className="max-h-[65vh] sm:max-h-[60vh] overflow-y-auto pr-1 sm:pr-2 space-y-8 custom-scrollbar">
                   {/* Customer Selection */}
                 <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100 shadow-sm">
                   <label htmlFor="client-assignment" className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Client Assignment *</label>
@@ -1316,6 +1563,17 @@ const AdminPanel: React.FC = () => {
                       onChange={e => setBusinessFormData(prev => ({ ...prev, gstNumber: e.target.value }))}
                       className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3.5 text-sm font-bold text-slate-800 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none transition-all shadow-sm font-mono"
                       placeholder="Optional"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">General Supplier Name (Stock Inflow)</label>
+                    <input
+                      type="text"
+                      value={businessFormData.supplierName || ''}
+                      onChange={e => setBusinessFormData(prev => ({ ...prev, supplierName: e.target.value }))}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3.5 text-sm font-bold text-slate-800 focus:border-blue-500 focus:ring-4 focus:ring-blue-100 outline-none transition-all shadow-sm"
+                      placeholder="Default supplier for purchases"
                     />
                   </div>
 
@@ -1447,8 +1705,8 @@ const AdminPanel: React.FC = () => {
         <div className="fixed inset-0 bg-slate-900/80 z-[100] flex items-start justify-center p-2 sm:p-4 overflow-y-auto backdrop-blur-sm scroll-smooth">
           <div className="relative bg-white rounded-[2rem] w-full max-w-md sm:max-w-lg md:max-w-2xl shadow-2xl overflow-hidden my-auto pointer-events-auto ring-1 ring-white/50 animate-in fade-in duration-300">
             <div className="h-1.5 bg-gradient-to-r from-blue-600 to-emerald-500"></div>
-            <div className="p-4 sm:p-10">
-              <h3 className="text-3xl font-black text-slate-800 mb-1 uppercase tracking-tight">{editingPlanId ? 'Edit Plan' : 'Create New Plan'}</h3>
+            <div className="p-4 sm:p-8 md:p-10">
+              <h3 className="text-2xl sm:text-3xl font-black text-slate-800 mb-1 uppercase tracking-tight">{editingPlanId ? 'Edit Plan' : 'Create New Plan'}</h3>
               <p className="text-xs text-slate-400 mb-6">Configure subscription plan details and features</p>
 
               {planFormError && (
@@ -1458,7 +1716,7 @@ const AdminPanel: React.FC = () => {
               )}
 
               <form onSubmit={handleSavePlan} className="space-y-4">
-                <div className="max-h-[60vh] overflow-y-auto p-1 pr-2 space-y-4">
+                <div className="max-h-[65vh] sm:max-h-[60vh] overflow-y-auto p-1 pr-2 space-y-4 custom-scrollbar">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="col-span-2">
                     <label htmlFor="plan-name" className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2.5 ml-1">Plan Name *</label>
@@ -1585,6 +1843,100 @@ const AdminPanel: React.FC = () => {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CUSTOMER EDIT MODAL */}
+      {showCustomerModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden border border-white/20 animate-in zoom-in-95 duration-300">
+            <div className="bg-slate-900 p-8 text-white flex justify-between items-center relative overflow-hidden">
+               <div className="relative z-10">
+                 <h2 className="text-2xl font-black uppercase tracking-tight">Edit Customer</h2>
+                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Modify account details & permissions</p>
+               </div>
+               <button onClick={() => setShowCustomerModal(false)} className="relative z-10 w-10 h-10 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-all">
+                 <i className="fas fa-times"></i>
+               </button>
+               <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full -mr-16 -mt-16 blur-2xl"></div>
+            </div>
+
+            <div className="p-8 space-y-6">
+              {customerFormError && (
+                <div className="bg-red-50 border border-red-100 p-4 rounded-2xl flex items-center gap-3 text-red-600 text-xs font-bold">
+                  <i className="fas fa-exclamation-circle text-sm"></i>
+                  {customerFormError}
+                </div>
+              )}
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Full Name</label>
+                  <input
+                    type="text"
+                    value={customerForm.name}
+                    onChange={(e) => setCustomerForm({...customerForm, name: e.target.value})}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-sm font-bold outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Email Address</label>
+                  <input
+                    type="email"
+                    value={customerForm.email}
+                    onChange={(e) => setCustomerForm({...customerForm, email: e.target.value})}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-sm font-bold outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Contact Number</label>
+                  <input
+                    type="text"
+                    value={customerForm.contactNo}
+                    onChange={(e) => setCustomerForm({...customerForm, contactNo: e.target.value})}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-sm font-bold outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Allowed Tabs (Pattern)</label>
+                  <input
+                    type="text"
+                    value={customerForm.allowedTabsPattern}
+                    onChange={(e) => setCustomerForm({...customerForm, allowedTabsPattern: e.target.value})}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-sm font-bold outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all"
+                    placeholder="e.g. dashboard, inventory, sales or *"
+                  />
+                  <p className="text-[9px] text-slate-400 font-bold mt-2 ml-1 italic">* means all tabs allowed</p>
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-4 pt-4 border-t border-slate-50">
+                <button
+                  onClick={() => {
+                    const newPass = window.prompt("Enter new password for this user:");
+                    if (newPass && newPass.length >= 6) {
+                      adminService.resetUserPassword(editingCustomer.id, newPass)
+                        .then(() => alert("Password reset successfully!"))
+                        .catch(err => alert("Failed to reset password."));
+                    } else if (newPass) {
+                      alert("Password must be at least 6 characters.");
+                    }
+                  }}
+                  className="flex-1 py-4 bg-slate-50 text-slate-500 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-100 transition-all"
+                >
+                  <i className="fas fa-key mr-2"></i> Reset Password
+                </button>
+                <button
+                  onClick={handleUpdateCustomer}
+                  disabled={customerFormLoading}
+                  className="flex-[1.5] py-4 bg-blue-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-blue-500/30 hover:bg-blue-700 transition-all flex items-center justify-center gap-2"
+                >
+                  {customerFormLoading ? <i className="fas fa-circle-notch fa-spin"></i> : <i className="fas fa-save"></i>}
+                  {customerFormLoading ? 'Updating...' : 'Update Details'}
+                </button>
+              </div>
             </div>
           </div>
         </div>

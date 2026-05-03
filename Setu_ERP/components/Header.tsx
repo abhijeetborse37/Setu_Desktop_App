@@ -1,19 +1,25 @@
 import React from 'react';
 import { NAVIGATION } from '../constants';
+import { User, Product } from '../types';
 
 interface HeaderProps {
   activeTab: string;
   companyName?: string;
   onMenuClick: () => void;
+  onNavigate: (tab: string) => void;
+  currentUser: User;
+  products: Product[];
+  adminUsers?: any[];
 }
 
-const Header: React.FC<HeaderProps> = ({ activeTab, companyName, onMenuClick }) => {
+const Header: React.FC<HeaderProps> = ({ activeTab, companyName, onMenuClick, onNavigate, currentUser }) => {
   const currentNav = NAVIGATION.find(n => n.id === activeTab);
-  const currentTitle = currentNav?.label || 'Dashboard';
-  const currentIcon = currentNav?.icon || 'fa-chart-pie';
+  const currentTitle = currentNav?.label || (activeTab === 'profile' ? 'My Profile' : activeTab === 'settings' ? 'Settings' : 'Dashboard');
+
+  const isAdmin = currentUser.role === 'ADMIN';
 
   return (
-    <header className="h-20 bg-white/80 backdrop-blur-md border-b border-slate-200/60 px-6 md:px-10 flex items-center justify-between sticky top-0 z-40 transition-all">
+    <header className="h-16 sm:h-20 bg-white/80 backdrop-blur-md border-b border-slate-200/60 px-4 md:px-10 flex items-center justify-between sticky top-0 z-40 transition-all">
       <div className="flex items-center space-x-4">
         <button
           onClick={onMenuClick}
@@ -25,7 +31,7 @@ const Header: React.FC<HeaderProps> = ({ activeTab, companyName, onMenuClick }) 
         
         <div className="hidden sm:flex flex-col">
           <nav className="flex items-center space-x-2 text-[10px] uppercase font-black tracking-[0.2em] text-slate-400 mb-1">
-            <span className="hover:text-blue-600 cursor-pointer">Setu ERP</span>
+            <span onClick={() => onNavigate(isAdmin ? 'admin' : 'dashboard')} className="hover:text-blue-600 cursor-pointer transition-colors">Setu ERP</span>
             <i className="fas fa-chevron-right text-[8px] opacity-30"></i>
             <span className="text-blue-500">{currentTitle}</span>
           </nav>
@@ -41,21 +47,16 @@ const Header: React.FC<HeaderProps> = ({ activeTab, companyName, onMenuClick }) 
       </div>
 
       <div className="flex items-center space-x-4">
-
-        <div className="flex items-center space-x-2 border-l border-slate-200 pl-4 ml-2">
-          <button className="p-2.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl relative transition-all active:scale-90" title="Notifications">
-            <i className="fas fa-bell text-lg"></i>
-            <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 border-2 border-white rounded-full"></span>
-          </button>
-          
-          <button className="p-2.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-all active:scale-90" title="Settings">
-            <i className="fas fa-cog text-lg"></i>
-          </button>
-        </div>
-
-        <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center font-black text-xs shadow-lg shadow-blue-500/20 border-2 border-white ring-1 ring-slate-200 cursor-pointer hover:scale-105 transition-transform">
-          A
-        </div>
+        <button 
+          onClick={() => onNavigate('profile')}
+          className={`h-10 w-10 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center font-black text-xs shadow-lg shadow-blue-500/20 border-2 border-white ring-1 ring-slate-200 cursor-pointer hover:scale-105 transition-transform overflow-hidden ${activeTab === 'profile' ? 'ring-blue-500 ring-2' : ''}`}
+        >
+          {currentUser.avatar ? (
+            <img src={currentUser.avatar} alt="Avatar" className="w-full h-full object-cover" />
+          ) : (
+            currentUser.name.charAt(0).toUpperCase()
+          )}
+        </button>
       </div>
     </header>
   );

@@ -122,6 +122,44 @@ namespace Setu.Api.Controllers
             }
         }
 
+        [HttpPost("bulk")]
+        public async Task<ActionResult> CreateBulkProducts([FromBody] List<CreateProductDto> dtos)
+        {
+            if (dtos == null || dtos.Count == 0) return BadRequest("No product data provided.");
+
+            var products = dtos.Select(dto => new Product
+            {
+                Id = Guid.NewGuid(),
+                UserId = UserId,
+                CompanyId = dto.CompanyId,
+                Name = dto.Name,
+                Description = dto.Description,
+                Category = dto.Category,
+                Price = dto.Price,
+                PurchasePrice = dto.PurchasePrice,
+                Stock = dto.Stock,
+                Supplier = dto.Supplier,
+                Sku = dto.Sku,
+                Image = dto.Image,
+                UnitPerPack = dto.UnitPerPack,
+                HsnCode = dto.HsnCode,
+                CustomAttributesJson = dto.CustomAttributesJson
+            }).ToList();
+
+            _context.Products.AddRange(products);
+
+            try
+            {
+                await _context.SaveChangesAsync();
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"Database error: {ex.Message}");
+            }
+
+            return Ok(new { count = products.Count });
+        }
+
         [HttpPost]
         public async Task<ActionResult<Product>> CreateProduct([FromBody] CreateProductDto dto)
         {

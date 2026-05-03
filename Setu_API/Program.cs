@@ -230,6 +230,11 @@ using (var scope = app.Services.CreateScope())
                 db.Database.ExecuteSqlRaw("ALTER TABLE Users ADD COLUMN Username TEXT NULL;");
                 Console.WriteLine("[DB INIT] Added Username column to Users table.");
             }
+            if (!columns.Contains("AllowCrossBusinessInvoicing"))
+            {
+                db.Database.ExecuteSqlRaw("ALTER TABLE Users ADD COLUMN AllowCrossBusinessInvoicing INTEGER DEFAULT 0;");
+                Console.WriteLine("[DB INIT] Added AllowCrossBusinessInvoicing column to Users table.");
+            }
         }
 
         var hasAdmin = db.Users.Any(u => u.Role == Setu.Api.Models.UserRole.Admin);

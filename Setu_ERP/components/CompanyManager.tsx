@@ -67,7 +67,8 @@ const CompanyManager: React.FC<Props> = ({ companies, activeId, setActiveId, pro
     revenue: 0,
     expenses: 0,
     incorporationDate: new Date().toISOString().split('T')[0],
-    website: ''
+    website: '',
+    supplierName: ''
   };
 
   const [formData, setFormData] = useState<any>(initialFormState);
@@ -151,6 +152,7 @@ const CompanyManager: React.FC<Props> = ({ companies, activeId, setActiveId, pro
       employees: Number(formData.employees) || 0,
       revenue: Number(formData.revenue) || 0,
       expenses: Number(formData.expenses) || 0,
+      supplierName: formData.supplierName || '',
       type: BUSINESS_TYPE_TO_STRING[Number(formData.type)] || 'PrivateLimited', // Send string for API's JsonStringEnumConverter
       // Remove navigation properties to avoid EF issues
       products: undefined,
@@ -332,9 +334,10 @@ const CompanyManager: React.FC<Props> = ({ companies, activeId, setActiveId, pro
                       value={formData.incorporationDate} onChange={e => setFormData({ ...formData, incorporationDate: e.target.value })} />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-1">Industry</label>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-1 tracking-widest">General Supplier Name (Stock Inflow)</label>
                     <input className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-5 py-3.5 text-sm focus:border-blue-500 outline-none"
-                      value={formData.industry} onChange={e => setFormData({ ...formData, industry: e.target.value })} />
+                      placeholder="Default supplier for purchases"
+                      value={formData.supplierName || ''} onChange={e => setFormData({ ...formData, supplierName: e.target.value })} />
                   </div>
                 </div>
               </div>

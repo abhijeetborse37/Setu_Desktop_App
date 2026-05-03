@@ -67,6 +67,7 @@ namespace Setu.Api.Controllers
                         c.Expenses,
                         c.IncorporationDate,
                         c.Website,
+                        c.SupplierName,
                         c.UserId
                     })
                     .ToListAsync();

@@ -35,7 +35,8 @@ namespace Setu.Api.Dtos
         decimal Revenue,
         decimal Expenses,
         DateTime IncorporationDate,
-        string? Website
+        string? Website,
+        string? SupplierName = null
     );
 
     // Business DTOs
@@ -70,26 +71,28 @@ namespace Setu.Api.Dtos
         string? CustomAttributesJson
     );
 
-    public record CreateCustomerDto(
-        Guid CompanyId,
-        string Name,
-        string Email,
-        string Phone,
-        string Address,
-        string? GstPanId,
-        string? LicenseNo,
-        CustomerGroup Group
-    );
+    public class CreateCustomerDto
+    {
+        public Guid CompanyId { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string Email { get; set; } = string.Empty;
+        public string Phone { get; set; } = string.Empty;
+        public string Address { get; set; } = string.Empty;
+        public string? GstPanId { get; set; }
+        public string? LicenseNo { get; set; }
+        public CustomerGroup Group { get; set; }
+    }
 
-    public record UpdateCustomerDto(
-        string Name,
-        string Email,
-        string Phone,
-        string Address,
-        string? GstPanId,
-        string? LicenseNo,
-        CustomerGroup Group
-    );
+    public class UpdateCustomerDto
+    {
+        public string Name { get; set; } = string.Empty;
+        public string Email { get; set; } = string.Empty;
+        public string Phone { get; set; } = string.Empty;
+        public string Address { get; set; } = string.Empty;
+        public string? GstPanId { get; set; }
+        public string? LicenseNo { get; set; }
+        public CustomerGroup Group { get; set; }
+    }
 
     public record CreateTransactionDto(
         Guid CompanyId,

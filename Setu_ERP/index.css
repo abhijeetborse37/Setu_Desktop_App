@@ -125,3 +125,64 @@
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
+
+/* =====================================================================
+   RESPONSIVE GLOBAL UTILITIES
+   ===================================================================== */
+
+/* Hide scrollbar while keeping scroll functionality (for horizontal tab nav) */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Touch-friendly tap targets (min 44px per WCAG) */
+@media (max-width: 768px) {
+  button, [role="button"], a[href], input[type="button"], input[type="submit"] {
+    min-height: 36px;
+  }
+
+  /* Improve form inputs on mobile */
+  input, select, textarea {
+    font-size: 16px !important; /* Prevents iOS auto-zoom */
+  }
+}
+
+/* Smooth momentum scrolling on iOS for overflow-y-auto containers */
+.overflow-y-auto, .overflow-x-auto, .overflow-auto {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Custom scrollbar for desktop (keeps styled scrollbars on larger screens) */
+@media (min-width: 768px) {
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: #e2e8f0;
+    border-radius: 999px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #cbd5e1;
+  }
+}
+
+/* Ensure modals don't overflow on very small screens */
+@media (max-width: 480px) {
+  .rounded-3xl {
+    border-radius: 1.25rem;
+  }
+  .rounded-\[2rem\] {
+    border-radius: 1rem;
+  }
+  .rounded-\[2\.5rem\] {
+    border-radius: 1.25rem;
+  }
+}

@@ -36,6 +36,8 @@ const Sidebar: React.FC<SidebarProps> = ({
   const filteredNav = NAVIGATION.filter(item => {
     if (isAdmin) return ['admin', 'users'].includes(item.id);
     if (item.id === 'admin' || item.id === 'users') return false;
+    // Settings and Profile are always allowed for customers
+    if (item.id === 'settings' || item.id === 'profile') return true;
     if (allowedSet !== null && !allowedSet.has(item.id)) return false;
     return true;
   });
@@ -54,7 +56,7 @@ const Sidebar: React.FC<SidebarProps> = ({
         onClick={() => handleNavClick(item.id)}
         title={!expanded ? item.label : undefined}
         className={`
-          w-full flex items-center rounded-xl transition-all duration-200 group
+          w-full flex items-center rounded-xl transition-all duration-200 group min-h-[48px]
           ${expanded ? 'px-4 py-3' : 'px-0 py-3 justify-center'}
           ${isActive
             ? 'bg-blue-600 text-white shadow-xl shadow-blue-500/20'
@@ -143,8 +145,8 @@ const Sidebar: React.FC<SidebarProps> = ({
         {/* ── ROLE BADGE ── */}
         <div className={`transition-all duration-300 overflow-hidden flex-shrink-0 ${expanded ? 'px-5 pt-4 pb-2 max-h-20 opacity-100' : 'max-h-0 opacity-0 py-0'}`}>
           <span className={`inline-flex items-center text-[8px] font-black uppercase tracking-[0.2em] px-2.5 py-1 rounded-lg ${isAdmin
-              ? 'bg-indigo-900/60 text-indigo-300 border border-indigo-700/40'
-              : 'bg-emerald-900/40 text-emerald-400 border border-emerald-800/40'
+            ? 'bg-indigo-900/60 text-indigo-300 border border-indigo-700/40'
+            : 'bg-emerald-900/40 text-emerald-400 border border-emerald-800/40'
             }`}>
             <i className={`fas ${isAdmin ? 'fa-crown' : 'fa-user'} mr-1.5`}></i>
             {isAdmin ? 'Super Admin' : 'Customer'}

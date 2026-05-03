@@ -123,5 +123,36 @@ namespace Setu.Api.Controllers
                 return StatusCode(500, $"Database error: {ex.Message}. Inner: {ex.InnerException?.Message}");
             }
         }
+        [HttpPost("bulk")]
+        public async Task<ActionResult<IEnumerable<Customer>>> BulkCreateCustomers([FromBody] List<CreateCustomerDto> dtos)
+        {
+            try
+            {
+                if (dtos == null || !dtos.Any()) return BadRequest("No customer data provided.");
+
+                var customers = dtos.Select(dto => new Customer
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = UserId,
+                    CompanyId = dto.CompanyId,
+                    Name = dto.Name,
+                    Email = dto.Email,
+                    Phone = dto.Phone,
+                    Address = dto.Address,
+                    GstPanId = dto.GstPanId,
+                    LicenseNo = dto.LicenseNo,
+                    Group = dto.Group
+                }).ToList();
+
+                _context.Customers.AddRange(customers);
+                await _context.SaveChangesAsync();
+
+                return Ok(customers);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"Database error: {ex.Message}. Inner: {ex.InnerException?.Message}");
+            }
+        }
     }
 }

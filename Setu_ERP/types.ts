@@ -50,6 +50,7 @@ export interface User {
   subscriptionStatus?: string;
   subscriptionEndDate?: string;
   planName?: string;
+  allowCrossBusinessInvoicing?: boolean;
   warningMessage?: string;
 }
 
@@ -152,6 +153,7 @@ export interface Transaction {
   entityName: string; // Customer for Sale, Supplier for Purchase
   entityGstNumber?: string; // GST/PAN number of the customer or supplier
   invoiceNumber: string;
+  referenceNumber?: string; // Optional reference number for purchase tracking
 }
 
 export interface AppState {

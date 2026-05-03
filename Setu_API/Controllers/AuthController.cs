@@ -71,6 +71,7 @@ namespace Setu.Api.Controllers
                         user.Role,
                         user.ContactNo,
                         AllowedTabsPattern = user.AllowedTabsPattern ?? "*",
+                        AllowCrossBusinessInvoicing = user.AllowCrossBusinessInvoicing,
                         SubscriptionStatus = subscriptionStatus,
                         SubscriptionEndDate = subscriptionEndDate,
                         IsSubscriptionActive = isSubscriptionActive,
@@ -183,6 +184,25 @@ namespace Setu.Api.Controllers
             return Ok(new { message = "Profile updated successfully.", user = new { user.Id, user.Name, user.Email, user.ContactNo, user.Role } });
         }
 
+        [HttpPatch("update-settings")]
+        [Microsoft.AspNetCore.Authorization.Authorize]
+        public async Task<IActionResult> UpdateSettings([FromBody] UpdateSettingsDto request)
+        {
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+            if (userIdClaim == null) return Unauthorized();
+
+            var userId = Guid.Parse(userIdClaim.Value);
+            var user = await _context.Users.FindAsync(userId);
+            if (user == null) return NotFound(new { message = "User not found." });
+
+            if (request.AllowCrossBusinessInvoicing.HasValue)
+                user.AllowCrossBusinessInvoicing = request.AllowCrossBusinessInvoicing.Value;
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "Settings updated successfully.", AllowCrossBusinessInvoicing = user.AllowCrossBusinessInvoicing });
+        }
+
         private string GenerateJwtToken(User user)
         {
             var claims = new List<Claim>
@@ -215,4 +235,5 @@ namespace Setu.Api.Controllers
     public record RequestOtpDto(string? Email, string? ContactNo);
     public record UpdateProfileDto(string? Email, string? ContactNo, string? NewName, string? NewPassword, string SimulatedOtp, string ProvidedOtp);
     public record SetTabsDto(string? AllowedTabsPattern);
+    public record UpdateSettingsDto(bool? AllowCrossBusinessInvoicing);
 }

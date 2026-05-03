@@ -183,11 +183,10 @@ const EditProfile: React.FC<EditProfileProps> = ({ currentUser, onProfileUpdated
                   <button
                     type="button"
                     onClick={() => setOtpMethod('email')}
-                    className={`flex items-center justify-center gap-2 py-3 rounded-xl border text-sm font-bold transition-all ${
-                      otpMethod === 'email'
-                        ? 'bg-blue-50 border-blue-500 text-blue-700'
-                        : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
-                    }`}
+                    className={`flex items-center justify-center gap-2 py-3 rounded-xl border text-sm font-bold transition-all ${otpMethod === 'email'
+                      ? 'bg-blue-50 border-blue-500 text-blue-700'
+                      : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
+                      }`}
                   >
                     <i className="fas fa-envelope"></i> Email
                   </button>
@@ -195,11 +194,10 @@ const EditProfile: React.FC<EditProfileProps> = ({ currentUser, onProfileUpdated
                     type="button"
                     onClick={() => setOtpMethod('mobile')}
                     disabled={!currentUser.contactNo}
-                    className={`flex items-center justify-center gap-2 py-3 rounded-xl border text-sm font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
-                      otpMethod === 'mobile'
-                        ? 'bg-blue-50 border-blue-500 text-blue-700'
-                        : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
-                    }`}
+                    className={`flex items-center justify-center gap-2 py-3 rounded-xl border text-sm font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed ${otpMethod === 'mobile'
+                      ? 'bg-blue-50 border-blue-500 text-blue-700'
+                      : 'bg-white border-slate-200 text-slate-500 hover:border-slate-300'
+                      }`}
                     title={!currentUser.contactNo ? 'No mobile number on file' : ''}
                   >
                     <i className="fas fa-mobile-alt"></i> Mobile
@@ -290,6 +288,7 @@ const EditProfile: React.FC<EditProfileProps> = ({ currentUser, onProfileUpdated
           )}
         </div>
       </div>
+
     </div>
   );
 };

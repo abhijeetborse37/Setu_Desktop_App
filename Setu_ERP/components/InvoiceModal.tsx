@@ -135,7 +135,7 @@ const InvoiceModal: React.FC<Props> = ({ transaction, company, customer, onClose
     let message = `🧾 *INVOICE SUMMARY* 🧾\n`;
     message += `┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n`;
     message += `*🏢 From:* ${company.name}\n`;
-    message += `*👤 Bill To:* ${safeCustomerName}\n`;
+    message += `*👤 ${transaction.type === 'PURCHASE' ? 'Supplier' : 'Bill To'}:* ${safeCustomerName}\n`;
     message += `*📄 Inv No:* ${transaction.invoiceNumber}\n`;
     message += `*📅 Date:* ${formattedDate}\n`;
     message += `┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈\n\n`;
@@ -494,7 +494,7 @@ const InvoiceModal: React.FC<Props> = ({ transaction, company, customer, onClose
 
                 {/* Invoice Details - Center */}
                 <div className="text-center px-4" style={{ minWidth: 'var(--detail-min-w)' }}>
-                  <h2 className="font-black text-slate-900 mb-2 tracking-widest" style={{ fontSize: 'var(--font-title)' }}>INVOICE</h2>
+                  <h2 className="font-black text-slate-900 mb-2 tracking-widest" style={{ fontSize: 'var(--font-title)' }}>{transaction.type === 'PURCHASE' ? 'PURCHASE BILL' : 'INVOICE'}</h2>
                   <div className="space-y-2">
                     <div>
                       <p className="font-bold text-slate-500 uppercase tracking-widest mb-0.5" style={{ fontSize: 'var(--font-body)' }}>Invoice No.</p>
@@ -534,7 +534,9 @@ const InvoiceModal: React.FC<Props> = ({ transaction, company, customer, onClose
             {/* ===== BUYER DETAILS ===== */}
             <div className="grid grid-cols-2 mb-4 pb-4 border-b border-slate-200 prevent-break" style={{ gap: 'var(--section-gap)' }}>
               <div>
-                <p className="font-bold text-slate-500 uppercase tracking-widest mb-3 pb-2 border-b border-slate-300" style={{ fontSize: 'var(--font-body)' }}>Sold To (Buyer Details)</p>
+                <p className="font-bold text-slate-500 uppercase tracking-widest mb-3 pb-2 border-b border-slate-300" style={{ fontSize: 'var(--font-body)' }}>
+                  {transaction.type === 'PURCHASE' ? 'Purchased From (Supplier Details)' : 'Sold To (Buyer Details)'}
+                </p>
                 <div className="text-slate-700 space-y-1" style={{ fontSize: 'var(--font-body)' }}>
                   <p><span className="font-bold text-slate-800">Name:</span> {transaction.entityName}</p>
                   <p><span className="font-bold text-slate-800">Address:</span> {customer?.address || 'Not provided'}</p>
@@ -668,7 +670,7 @@ const InvoiceModal: React.FC<Props> = ({ transaction, company, customer, onClose
                   <div className="border-t border-slate-400 min-h-16 flex items-end justify-center">
                     <span className="font-semibold text-slate-600"></span>
                   </div>
-                  <p className="font-bold text-slate-700 mt-1 uppercase tracking-widest" style={{ fontSize: 'var(--font-body)' }}>Signature of Buyer</p>
+                  <p className="font-bold text-slate-700 mt-1 uppercase tracking-widest" style={{ fontSize: 'var(--font-body)' }}>{transaction.type === 'PURCHASE' ? 'Signature of Supplier' : 'Signature of Buyer'}</p>
                   <p className="font-bold text-slate-700 uppercase tracking-widest" style={{ fontSize: 'var(--font-body)' }}>with Stamp/Seal</p>
                 </div>
               </div>

@@ -48,6 +48,7 @@ export const authService = {
   updateProfile: (data: any) => api.post('/auth/update-profile', data),
   setUserTabs: (userId: string, allowedTabsPattern: string) =>
     api.put(`/auth/users/${userId}/tabs`, { allowedTabsPattern }),
+  updateSettings: (settings: any) => api.patch('/auth/update-settings', settings),
 };
 
 export const dashboardService = { getInitData: () => api.get('/dashboard/init') };
@@ -60,12 +61,14 @@ export const companyService = {
 export const customerService = {
   getAll: () => api.get('/customers'),
   create: (data: any) => api.post('/customers', data),
+  createBulk: (data: any[]) => api.post('/customers/bulk', data),
   update: (id: string, data: any) => api.put(`/customers/${id}`, data),
   delete: (id: string) => api.delete(`/customers/${id}`),
 };
 export const productService = {
   getByCompany: (companyId: string) => api.get(`/products/${companyId}`),
   create: (data: any) => api.post('/products', data),
+  createBulk: (data: any[]) => api.post('/products/bulk', data),
   update: (id: string, data: any) => api.put(`/products/${id}`, data),
   delete: (id: string) => api.delete(`/products/${id}`),
 };
@@ -97,6 +100,8 @@ export const adminService = {
   deletePlan: (id: string) => api.delete(`/admin/plans/${id}`),
   toggleUserStatus: (userId: string) => api.post(`/admin/users/${userId}/toggle-status`),
   resetUserPassword: (userId: string, newPassword: string) => api.post(`/admin/users/${userId}/reset-password`, { newPassword }),
+  updateUser: (userId: string, data: any) => api.put(`/admin/users/${userId}`, data),
+  deleteUser: (userId: string) => api.delete(`/admin/users/${userId}`),
 };
 
 export default api;

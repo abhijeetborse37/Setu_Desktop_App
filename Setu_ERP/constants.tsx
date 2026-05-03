@@ -16,6 +16,7 @@ export const NAVIGATION = [
   { id: 'products', label: 'Product Catalog', icon: 'fa-box-open' },
   { id: 'customers', label: 'CRM & Clients', icon: 'fa-users' },
   { id: 'analytics', label: 'Analytics & Reports', icon: 'fa-chart-line' },
+  { id: 'settings', label: 'App Settings', icon: 'fa-cog' },
   { id: 'users', label: 'User Management', icon: 'fa-user-shield' },
   { id: 'admin', label: 'Admin Panel', icon: 'fa-crown' },
 ];

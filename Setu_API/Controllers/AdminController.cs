@@ -6,6 +6,7 @@ using Setu.Api.Data;
 using Setu.Api.Models;
 using Setu.Api.Services;
 using Microsoft.AspNetCore.OutputCaching;
+using System.Text.Json.Serialization;
 
 namespace Setu.Api.Controllers
 {
@@ -245,6 +246,41 @@ namespace Setu.Api.Controllers
             return Ok(new { message = "Plan deleted" });
         }
 
+        [HttpPut("users/{userId}")]
+        public async Task<IActionResult> UpdateUser(Guid userId, [FromBody] UpdateUserDto dto)
+        {
+            var user = await _context.Users.FindAsync(userId);
+            if (user == null) return NotFound("User not found");
+
+            // Check if email is already taken by another user
+            if (await _context.Users.AnyAsync(u => u.Email == dto.Email && u.Id != userId))
+            {
+                return BadRequest(new { message = "Email already in use by another account." });
+            }
+
+            user.Name = dto.Name;
+            user.Email = dto.Email;
+            user.ContactNo = dto.ContactNo;
+            user.AllowedTabsPattern = dto.AllowedTabsPattern;
+            user.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+            return Ok(new { message = "User updated successfully", user });
+        }
+
+        [HttpDelete("users/{userId}")]
+        public async Task<IActionResult> DeleteUser(Guid userId)
+        {
+            var user = await _context.Users.Include(u => u.Subscription).FirstOrDefaultAsync(u => u.Id == userId);
+            if (user == null) return NotFound("User not found");
+
+            // Note: Cascade delete should handle Companies, Products, and Transactions
+            // but we explicitly remove the user from the context.
+            _context.Users.Remove(user);
+            await _context.SaveChangesAsync();
+            return Ok(new { message = "User and all associated data deleted successfully" });
+        }
+
         [HttpPost("companies/register")]
         public async Task<IActionResult> RegisterCompanyForUser([FromBody] RegisterCompanyDto? dto)
         {
@@ -312,7 +348,8 @@ namespace Setu.Api.Controllers
                             ? DateTime.SpecifyKind(dto.IncorporationDate.Value, DateTimeKind.Utc)
                             : dto.IncorporationDate.Value.ToUniversalTime())
                         : DateTime.UtcNow,
-                    Website = dto.Website?.Trim()
+                    Website = dto.Website?.Trim(),
+                    SupplierName = dto.SupplierName?.Trim()
                 };
 
                 _context.Companies.Add(company);
@@ -332,7 +369,8 @@ namespace Setu.Api.Controllers
                             Owner = user.Name,
                             company.Address,
                             company.GstNumber,
-                            company.TaxId
+                            company.TaxId,
+                            company.SupplierName
                         },
                         code = "COMPANY_CREATED"
                     });
@@ -350,6 +388,12 @@ namespace Setu.Api.Controllers
         }
     }
 
+    public record UpdateUserDto(
+        [property: JsonPropertyName("name")] string Name, 
+        [property: JsonPropertyName("email")] string Email, 
+        [property: JsonPropertyName("contactNo")] string ContactNo, 
+        [property: JsonPropertyName("allowedTabsPattern")] string AllowedTabsPattern
+    );
     public record RoleDto(UserRole Role);
     public record ResetPasswordDto(string NewPassword);
     public record CreateSubscriptionDto(Guid UserId, Guid PlanId, DateTime? StartDate);
@@ -374,6 +418,7 @@ namespace Setu.Api.Controllers
         decimal Revenue = 0,
         decimal Expenses = 0,
         DateTime? IncorporationDate = null,
-        string? Website = null
+        string? Website = null,
+        string? SupplierName = null
     );
 }

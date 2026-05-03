@@ -46,6 +46,7 @@ namespace Setu.Api.Models
         
         public DateTime IncorporationDate { get; set; }
         public string? Website { get; set; }
+        public string? SupplierName { get; set; }
 
         public ICollection<Product> Products { get; set; } = new List<Product>();
         public ICollection<Customer> Customers { get; set; } = new List<Customer>();

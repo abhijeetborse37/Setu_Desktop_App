@@ -14,11 +14,12 @@ import SalesManager from './components/SalesManager';
 import AdminPanel from './components/AdminPanel';
 import Login from './components/Login';
 import EditProfile from './components/EditProfile';
+import AppSettings from './components/AppSettings';
 import AccessDenied from './components/AccessDenied';
 import ErrorBoundary from './components/ErrorBoundary';
 
 // Import Backend services and utilities
-import { companyService, productService, transactionService, customerService, dashboardService } from './services/api';
+import { companyService, productService, transactionService, customerService, dashboardService, adminService } from './services/api';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -39,6 +40,7 @@ const App: React.FC = () => {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [activeCompanyId, setActiveCompanyIdState] = useState<string | null>(localStorage.getItem('setu_active_company'));
+  const [adminUsers, setAdminUsers] = useState<any[]>([]);
 
   const setActiveCompanyId = (id: string | null) => {
     setActiveCompanyIdState(id);
@@ -51,7 +53,6 @@ const App: React.FC = () => {
 
   const fetchData = async () => {
     if (!currentUser) return;
-    // Prevent concurrent fetches from overlapping and hammering the UI thread
     if (isFetchingRef.current) return;
     isFetchingRef.current = true;
     setIsSyncing(true);
@@ -60,14 +61,12 @@ const App: React.FC = () => {
       const response = await dashboardService.getInitData();
       const data = response.data;
 
-      // Wrap large state updates in startTransition to prevent blocking the UI thread
       startTransition(() => {
         setCompanies(data.companies || []);
         setProducts(data.products || []);
         setCustomers(data.customers || []);
         setTransactions(data.transactions || []);
 
-        // Resolve active company INSIDE the transition so it batches with the state above
         const companiesList: any[] = data.companies || [];
         const resolvedId = activeCompanyId && companiesList.find((c: any) => c.id === activeCompanyId)
           ? activeCompanyId
@@ -80,19 +79,19 @@ const App: React.FC = () => {
     } catch (err: any) {
       console.error('App: Error fetching dashboard data:', err.response?.data || err.message);
     } finally {
+      if (currentUser?.role === UserRole.ADMIN) {
+        adminService.getUsers().then(res => setAdminUsers(res.data)).catch(err => console.error(err));
+      }
       isFetchingRef.current = false;
       setIsSyncing(false);
     }
   };
 
-  // Fetch ONLY when the user session changes — NOT on every tab switch.
-  // Tab switching just re-renders already-loaded data; no new API call needed.
   useEffect(() => {
     fetchData();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser]);
 
-  // Session handling
   useEffect(() => {
     const savedUser = localStorage.getItem('setu_user');
     if (savedUser) {
@@ -103,9 +102,7 @@ const App: React.FC = () => {
   const handleLogin = (user: User) => {
     setCurrentUser(user);
     localStorage.setItem('setu_user', JSON.stringify(user));
-    // Admins land on admin panel; customers land on dashboard
     setActiveTab(user.role === UserRole.ADMIN ? 'admin' : 'dashboard');
-    // Ensure the window has focus after login to prevent "frozen cursor"
     window.focus();
   };
 
@@ -124,7 +121,6 @@ const App: React.FC = () => {
     companies.find(c => c.id === activeCompanyId) || null,
     [companies, activeCompanyId]);
 
-  // Filtered data scoped to the active company only
   const activeProducts = useMemo(() =>
     activeCompanyId ? products.filter(p => p.companyId === activeCompanyId) : products,
     [products, activeCompanyId]);
@@ -140,20 +136,17 @@ const App: React.FC = () => {
   const isAdmin = currentUser?.role === UserRole.ADMIN;
 
   const navigateTo = (tab: string) => {
-    // Admin can only access: admin, users, profile
     if (isAdmin) {
       if (!['admin', 'users', 'profile'].includes(tab)) {
         alert('Unauthorized: Admins can only access Admin Panel, Access Control, and My Profile.');
         return;
       }
     } else {
-      // Customer cannot access admin or users tabs
       if (tab === 'admin' || tab === 'users') {
         alert('Unauthorized: Admin access only.');
         return;
       }
-      // For customers: check allowedTabsPattern
-      if (tab !== 'profile') {
+      if (tab !== 'profile' && tab !== 'settings') {
         const pattern = currentUser?.allowedTabsPattern ?? '*';
         if (pattern !== '*') {
           const allowed = pattern.split(',').map(s => s.trim());
@@ -195,22 +188,45 @@ const App: React.FC = () => {
         return <InventoryManager products={activeProducts} transactions={activeTransactions} activeCompany={activeCompany} currentUser={currentUser} onDataChange={fetchData} />;
       case 'sales':
         if (isAdmin) return <AccessDenied />;
-        return <SalesManager products={activeProducts} customers={customers} transactions={activeTransactions} activeCompany={activeCompany} currentUser={currentUser} onDataChange={fetchData} />;
+        const salesProducts = currentUser?.allowCrossBusinessInvoicing ? products : activeProducts;
+        return <SalesManager products={salesProducts} customers={customers} transactions={activeTransactions} activeCompany={activeCompany} companies={companies} currentUser={currentUser} onDataChange={fetchData} />;
       case 'products':
         if (isAdmin) return <AccessDenied />;
-        return <ProductManager products={activeProducts} onDataChange={fetchData} activeCompanyId={activeCompanyId} activeCompany={activeCompany} currencySymbol={activeCompany?.currencySymbol || '₹'} currentUser={currentUser!} />;
+        return (
+          <ProductManager 
+            products={activeProducts} 
+            activeCompany={activeCompany} 
+            activeCompanyId={activeCompanyId}
+            currencySymbol={activeCompany?.currencySymbol || '₹'}
+            currentUser={currentUser}
+            onDataChange={fetchData} 
+          />
+        );
       case 'customers':
         if (isAdmin) return <AccessDenied />;
-        return <CustomerManager customers={customers} onDataChange={fetchData} activeCompanyId={activeCompanyId} currencySymbol={activeCompany?.currencySymbol || '₹'} currentUser={currentUser!} />;
-      case 'users':
-        return isAdmin ? <UserManager currentUser={currentUser} /> : <AccessDenied />;
-      case 'admin':
-        return isAdmin ? <AdminPanel /> : <AccessDenied />;
+        return (
+          <CustomerManager 
+            customers={activeCustomers} 
+            activeCompany={activeCompany} 
+            activeCompanyId={activeCompanyId}
+            currencySymbol={activeCompany?.currencySymbol || '₹'}
+            currentUser={currentUser}
+            onDataChange={fetchData} 
+          />
+        );
       case 'analytics':
         if (isAdmin) return <AccessDenied />;
         return <Analytics company={activeCompany} products={activeProducts} transactions={activeTransactions} />;
       case 'profile':
         return <EditProfile currentUser={currentUser} onProfileUpdated={handleProfileUpdated} />;
+      case 'settings':
+        return <AppSettings currentUser={currentUser} onSettingsUpdated={handleProfileUpdated} />;
+      case 'users':
+        if (!isAdmin) return <AccessDenied />;
+        return <UserManager />;
+      case 'admin':
+        if (!isAdmin) return <AccessDenied />;
+        return <AdminPanel />;
       default:
         if (isAdmin) return <AdminPanel />;
         return <Dashboard company={activeCompany} products={activeProducts} customers={activeCustomers} transactions={activeTransactions} onNavigate={navigateTo} />;
@@ -219,7 +235,7 @@ const App: React.FC = () => {
 
   return (
     <ErrorBoundary>
-      <div className="flex h-[100dvh] overflow-hidden bg-slate-50 font-sans">
+      <div className="flex h-screen bg-slate-50 font-sans text-slate-900 selection:bg-blue-100 selection:text-blue-700 overflow-hidden">
         <Sidebar
           activeTab={activeTab}
           setActiveTab={navigateTo}
@@ -231,18 +247,20 @@ const App: React.FC = () => {
           setIsMinimized={handleSetSidebarMinimized}
         />
 
-        {/* Mobile overlay is now inside the Sidebar component */}
-
-        <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
+        <div className="flex-1 flex flex-col min-w-0 relative h-full overflow-hidden">
           <Header
             activeTab={activeTab}
             companyName={!isAdmin ? activeCompany?.name : undefined}
             onMenuClick={() => setIsSidebarOpen(true)}
+            onNavigate={navigateTo}
+            currentUser={currentUser}
+            products={products}
+            adminUsers={adminUsers}
           />
 
           {isSyncing && (
-            <div className="absolute top-20 left-0 right-0 h-1 bg-blue-100 overflow-hidden z-50">
-              <div className="h-full bg-blue-600 animate-[loading_1.5s_infinite] w-1/3"></div>
+            <div className="absolute top-0 left-0 right-0 h-1 z-50 overflow-hidden">
+              <div className="h-full bg-blue-500 animate-[loading_1.5s_infinite_linear]"></div>
             </div>
           )}
 
@@ -259,7 +277,7 @@ const App: React.FC = () => {
           )}
 
           <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 flex flex-col custom-scrollbar">
-            <div className="max-w-7xl mx-auto flex-1 w-full">
+            <div key={activeTab} className="max-w-7xl mx-auto flex-1 w-full animate-in fade-in slide-in-from-bottom-2 duration-300">
               {renderContent()}
             </div>
 

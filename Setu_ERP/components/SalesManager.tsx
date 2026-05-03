@@ -10,7 +10,8 @@ interface Props {
   customers: Customer[];
   transactions: Transaction[];
   activeCompany: Company | null;
-  currentUser: User;
+  companies?: Company[];
+  currentUser: User | null;
   onDataChange: () => void;
 }
 
@@ -32,7 +33,7 @@ const COUNTRY_TAX_MAP: Record<string, string> = {
   'Australia': 'GST'
 };
 
-const SalesManager: React.FC<Props> = ({ products, customers, transactions, activeCompany, currentUser, onDataChange }) => {
+const SalesManager: React.FC<Props> = ({ products, customers, transactions, activeCompany, companies, currentUser, onDataChange }) => {
   const [showModal, setShowModal] = useState(false);
   const [editingTransactionId, setEditingTransactionId] = useState<string | null>(null);
   const [showInvoice, setShowInvoice] = useState<Transaction | null>(null);
@@ -41,6 +42,7 @@ const SalesManager: React.FC<Props> = ({ products, customers, transactions, acti
   const [endDate, setEndDate] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [isFiltersVisible, setIsFiltersVisible] = useState(false);
 
   const [customerId, setCustomerId] = useState('');
   const [newCustomerData, setNewCustomerData] = useState<{ name: string, phone: string, gst: string, email: string } | null>(null);
@@ -317,63 +319,82 @@ const SalesManager: React.FC<Props> = ({ products, customers, transactions, acti
 
 
 
-      <div className="bg-white p-6 rounded-[2rem] border border-slate-200/60 shadow-sm space-y-6 filter-bar no-print ring-4 ring-slate-100/50">
-        <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-          <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Transaction Filtering & Audit</h4>
-        </div>
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-end">
-          <div className="lg:col-span-6">
-            <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Search Records</label>
-            <div className="relative group">
+      <div className="bg-white rounded-3xl border border-slate-200/60 shadow-sm overflow-hidden no-print ring-4 ring-slate-100/50 transition-all duration-300">
+        <div className="p-5 md:p-6 space-y-6">
+          {/* Header & Search Row */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex-1 max-w-2xl relative group">
               <input
                 type="text"
-                placeholder="Search invoice or customer..."
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 pl-12 text-xs focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all shadow-sm"
+                placeholder="Search by invoice or customer name..."
+                className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-3.5 px-5 pl-12 text-sm focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 outline-none transition-all shadow-sm"
                 value={searchTerm}
                 onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }}
               />
               <i className="fas fa-search absolute left-4.5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-blue-500 transition-colors pointer-events-none"></i>
             </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setIsFiltersVisible(!isFiltersVisible)}
+                className={`flex items-center gap-2 px-5 py-3.5 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all ${isFiltersVisible ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'}`}
+              >
+                <i className={`fas ${isFiltersVisible ? 'fa-filter-circle-xmark' : 'fa-filter'} text-sm`}></i>
+                {isFiltersVisible ? 'Hide Filters' : 'Advanced Filters'}
+              </button>
+              {(searchTerm || startDate || endDate) && (
+                <button
+                  onClick={() => { setSearchTerm(''); setStartDate(''); setEndDate(''); setCurrentPage(1); }}
+                  className="p-3.5 bg-red-50 text-red-500 rounded-2xl hover:bg-red-100 transition-all"
+                  title="Reset All Filters"
+                >
+                  <i className="fas fa-undo-alt text-sm"></i>
+                </button>
+              )}
+            </div>
           </div>
-          <div className="lg:col-span-6 flex flex-col sm:flex-row items-center gap-3">
-            <div className="w-full">
-              <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Date Range</label>
-              <div className="flex items-center space-x-2">
-                <input
-                  type="date"
-                  className="flex-1 bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-3 text-[10px] focus:ring-2 focus:ring-blue-500 outline-none"
-                  value={startDate}
-                  onChange={e => { setStartDate(e.target.value); setCurrentPage(1); }}
-                />
-                <span className="text-slate-300">-</span>
-                <input
-                  type="date"
-                  className="flex-1 bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-3 text-[10px] focus:ring-2 focus:ring-blue-500 outline-none"
-                  value={endDate}
-                  onChange={e => { setEndDate(e.target.value); setCurrentPage(1); }}
-                />
+
+          {/* Collapsible Filter Content */}
+          {isFiltersVisible && (
+            <div className="pt-6 border-t border-slate-100 grid grid-cols-1 md:grid-cols-3 gap-6 animate-in slide-in-from-top-4 duration-300">
+              <div className="md:col-span-2">
+                <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-2.5 ml-1">Filter by Date Range</label>
+                <div className="flex items-center gap-3">
+                  <div className="relative flex-1">
+                    <input
+                      type="date"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-none hover:bg-slate-100 transition-colors"
+                      value={startDate}
+                      onChange={e => { setStartDate(e.target.value); setCurrentPage(1); }}
+                    />
+                    <span className="absolute -top-2 left-3 bg-white px-1 text-[8px] font-black text-slate-400 uppercase">From</span>
+                  </div>
+                  <div className="text-slate-300 font-bold">to</div>
+                  <div className="relative flex-1">
+                    <input
+                      type="date"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-none hover:bg-slate-100 transition-colors"
+                      value={endDate}
+                      onChange={e => { setEndDate(e.target.value); setCurrentPage(1); }}
+                    />
+                    <span className="absolute -top-2 left-3 bg-white px-1 text-[8px] font-black text-slate-400 uppercase">To</span>
+                  </div>
+                </div>
+              </div>
+              <div>
+                <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-2.5 ml-1">Records Per Page</label>
+                <select
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-none appearance-none cursor-pointer hover:bg-slate-100 transition-colors"
+                  value={itemsPerPage}
+                  onChange={e => { setItemsPerPage(Number(e.target.value)); setCurrentPage(1); }}
+                >
+                  <option value={10}>Show 10 Records</option>
+                  <option value={20}>Show 20 Records</option>
+                  <option value={50}>Show 50 Records</option>
+                  <option value={100}>Show 100 Records</option>
+                </select>
               </div>
             </div>
-            <div className="w-full sm:w-auto">
-              <label className="block text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Per Page</label>
-              <select
-                className="bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-4 text-[10px] font-bold focus:ring-2 focus:ring-blue-500 outline-none w-full"
-                value={itemsPerPage}
-                onChange={e => { setItemsPerPage(Number(e.target.value)); setCurrentPage(1); }}
-              >
-                <option value={10}>10 Records</option>
-                <option value={20}>20 Records</option>
-                <option value={50}>50 Records</option>
-                <option value={100}>100 Records</option>
-              </select>
-            </div>
-            <button
-              onClick={() => { setSearchTerm(''); setStartDate(''); setEndDate(''); setCurrentPage(1); }}
-              className="w-full sm:w-auto mt-6 bg-slate-100 hover:bg-slate-200 text-slate-600 px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
-            >
-              Reset
-            </button>
-          </div>
+          )}
         </div>
       </div>
 
@@ -645,16 +666,19 @@ const SalesManager: React.FC<Props> = ({ products, customers, transactions, acti
                               <SearchableSelect
                                 label="Product / Service *"
                                 placeholder="Search inventory..."
-                                options={products.map(p => ({
-                                  id: p.id,
-                                  name: p.name,
-                                  subtext: `STOCK: ${p.stock} | RATE: ${symbol}${p.price}`
-                                }))}
+                                options={products.map(p => {
+                                  const biz = companies?.find(c => c.id === p.companyId);
+                                  return {
+                                    id: p.id,
+                                    name: p.name,
+                                    subtext: `${biz?.name ? `[${biz.name}] ` : ''}STOCK: ${p.stock} | RATE: ${symbol}${p.price}`
+                                  };
+                                })}
                                 value={item.productId}
                                 onChange={val => updateLineItem(item.id, 'productId', val)}
                               />
                             </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 md:col-span-7 gap-3">
+                            <div className="grid grid-cols-2 md:grid-cols-4 md:col-span-7 gap-3">
                               <div className="col-span-1">
                                 <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Qty</label>
                                 <input required type="number" min="1" className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-xs outline-none"

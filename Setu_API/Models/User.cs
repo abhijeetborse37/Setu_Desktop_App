@@ -32,6 +32,8 @@ namespace Setu.Api.Models
         
         public string? AllowedTabsPattern { get; set; } = "*";
         
+        public bool AllowCrossBusinessInvoicing { get; set; } = false;
+        
         public bool IsActive { get; set; } = true;
 
         public Subscription? Subscription { get; set; }

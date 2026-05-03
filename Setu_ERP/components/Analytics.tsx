@@ -16,6 +16,7 @@ const Analytics: React.FC<Props> = ({ company, products, transactions }) => {
   const [transactionType, setTransactionType] = useState<'ALL' | 'PURCHASE' | 'SALE'>('ALL');
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [isFiltersVisible, setIsFiltersVisible] = useState(false);
 
   // Define useMemo BEFORE early return
   const filteredTransactions = useMemo(() => {
@@ -96,25 +97,86 @@ const Analytics: React.FC<Props> = ({ company, products, transactions }) => {
         </div>
       </div>
 
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-6 rounded-2xl border border-slate-200 shadow-sm gap-4">
-        <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2 sm:gap-3 w-full md:w-auto">
-          <div className="flex items-center space-x-2 bg-white px-3 py-2 rounded-xl border border-slate-300 shadow-sm">
-            <select 
-              value={transactionType}
-              onChange={(e) => setTransactionType(e.target.value as 'ALL' | 'PURCHASE' | 'SALE')}
-              className="bg-transparent text-xs font-bold outline-none border-none cursor-pointer text-slate-800"
-            >
-              <option value="ALL">📊 All Records</option>
-              <option value="PURCHASE">📥 Purchase Ledger</option>
-              <option value="SALE">📤 Sales Ledger</option>
-            </select>
+      <div className="bg-white rounded-3xl border border-slate-200/60 shadow-sm overflow-hidden no-print ring-4 ring-slate-100/50 transition-all duration-300">
+        <div className="p-5 md:p-6 space-y-6">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="bg-blue-50 text-blue-600 w-10 h-10 rounded-xl flex items-center justify-center">
+                <i className="fas fa-filter text-sm"></i>
+              </div>
+              <div>
+                <h4 className="text-sm font-black text-slate-800 uppercase tracking-tight">Audit Filters</h4>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Refine your financial audit data</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setIsFiltersVisible(!isFiltersVisible)}
+                className={`flex items-center gap-2 px-5 py-3.5 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all ${isFiltersVisible ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'}`}
+              >
+                <i className={`fas ${isFiltersVisible ? 'fa-chevron-up' : 'fa-sliders'} text-sm`}></i>
+                {isFiltersVisible ? 'Close Filters' : 'Configure Reports'}
+              </button>
+            </div>
           </div>
 
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center space-y-2 sm:space-y-0 sm:space-x-2 bg-white px-3 py-2 rounded-xl border border-slate-300 shadow-sm w-full sm:w-auto">
-            <input type="date" className="flex-1 sm:flex-none bg-white sm:bg-transparent text-xs font-bold outline-none border sm:border-none rounded-lg sm:rounded-none px-3 py-2 sm:py-0" value={startDate} onChange={e => setStartDate(e.target.value)} />
-            <span className="text-slate-300 text-xs text-center">to</span>
-            <input type="date" className="flex-1 sm:flex-none bg-white sm:bg-transparent text-xs font-bold outline-none border sm:border-none rounded-lg sm:rounded-none px-3 py-2 sm:py-0" value={endDate} onChange={e => setEndDate(e.target.value)} />
-          </div>
+          {isFiltersVisible && (
+            <div className="pt-6 border-t border-slate-100 grid grid-cols-1 md:grid-cols-12 gap-6 animate-in slide-in-from-top-4 duration-300">
+              <div className="md:col-span-4">
+                <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-2.5 ml-1">Ledger Type</label>
+                <select
+                  value={transactionType}
+                  onChange={(e) => setTransactionType(e.target.value as 'ALL' | 'PURCHASE' | 'SALE')}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-none appearance-none cursor-pointer hover:bg-slate-100 transition-colors text-slate-800"
+                >
+                  <option value="ALL">📊 All Records</option>
+                  <option value="PURCHASE">📥 Purchase Ledger</option>
+                  <option value="SALE">📤 Sales Ledger</option>
+                </select>
+              </div>
+
+              <div className="md:col-span-6">
+                <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-2.5 ml-1">Date Period</label>
+                <div className="flex items-center gap-3">
+                  <div className="relative flex-1">
+                    <input
+                      type="date"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-none hover:bg-slate-100 transition-colors"
+                      value={startDate}
+                      onChange={e => setStartDate(e.target.value)}
+                    />
+                    <span className="absolute -top-2 left-3 bg-white px-1 text-[8px] font-black text-slate-400 uppercase">Start</span>
+                  </div>
+                  <div className="text-slate-300 font-bold">to</div>
+                  <div className="relative flex-1">
+                    <input
+                      type="date"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-none hover:bg-slate-100 transition-colors"
+                      value={endDate}
+                      onChange={e => setEndDate(e.target.value)}
+                    />
+                    <span className="absolute -top-2 left-3 bg-white px-1 text-[8px] font-black text-slate-400 uppercase">End</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-2.5 ml-1">Entries</label>
+                <select
+                  value={itemsPerPage}
+                  onChange={(e) => {
+                    setItemsPerPage(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-none appearance-none cursor-pointer hover:bg-slate-100 transition-colors text-slate-800"
+                >
+                  <option value="10">10 Rows</option>
+                  <option value="20">20 Rows</option>
+                  <option value="50">50 Rows</option>
+                </select>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

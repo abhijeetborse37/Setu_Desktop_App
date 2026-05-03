@@ -3,6 +3,7 @@ import React, { useState, useMemo, useRef } from 'react';
 import { Product, CustomAttribute, User, Company } from '../types';
 import { productService } from '../services/api';
 import { validators } from '../utils';
+import * as XLSX from 'xlsx';
 
 interface Props {
   products: Product[];
@@ -21,6 +22,9 @@ const ProductManager: React.FC<Props> = ({ products, onDataChange, activeCompany
   const [customAttrs, setCustomAttrs] = useState<CustomAttribute[]>([]);
   const [isBusy, setIsBusy] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
+  const [showBulkModal, setShowBulkModal] = useState(false);
+  const [bulkFile, setBulkFile] = useState<File | null>(null);
+  const [bulkPreview, setBulkPreview] = useState<any[]>([]);
 
   const [newProduct, setNewProduct] = useState({
     name: '',
@@ -200,26 +204,109 @@ const ProductManager: React.FC<Props> = ({ products, onDataChange, activeCompany
           <div className="text-2xl font-black text-blue-600 leading-none">{products.length}</div>
         </div>
       </div>
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="relative flex-1 w-full max-w-md">
-          <input
-            type="text"
-            placeholder={`Search ${products.length} products...`}
-            className="w-full bg-white border border-slate-200 rounded-2xl py-3.5 px-4 pl-12 text-sm shadow-sm focus:ring-2 focus:ring-blue-500 transition-all outline-none"
-            value={searchTerm}
-            onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }}
-          />
-          <i className="fas fa-search absolute left-4 top-[17px] text-slate-300"></i>
+      <div className="bg-white rounded-3xl border border-slate-200/60 shadow-sm overflow-hidden no-print ring-4 ring-slate-100/50 transition-all duration-300">
+        <div className="p-5 md:p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="relative flex-1 w-full max-w-2xl group">
+            <input
+              type="text"
+              placeholder={`Search across ${products.length} catalog items...`}
+              className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-3.5 px-5 pl-12 text-sm focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 outline-none transition-all shadow-sm"
+              value={searchTerm}
+              onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+            />
+            <i className="fas fa-search absolute left-4.5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-blue-500 transition-colors pointer-events-none"></i>
+          </div>
+          <div className="flex w-full md:w-auto gap-3">
+            <button
+              onClick={() => setShowBulkModal(true)}
+              className="flex-1 md:flex-none bg-slate-900 hover:bg-black text-white px-6 py-3.5 rounded-2xl font-black shadow-xl shadow-slate-200 flex items-center justify-center transition-all uppercase text-[10px] tracking-[0.15em] border border-slate-700"
+            >
+              <i className="fas fa-file-upload mr-2 text-emerald-400"></i> Bulk Upload
+            </button>
+            <button
+              onClick={() => { resetForm(); setShowAddForm(true); }}
+              className="flex-1 md:flex-none bg-blue-600 hover:bg-blue-700 text-white px-8 py-3.5 rounded-2xl font-black shadow-xl shadow-blue-500/30 transition-all flex items-center justify-center uppercase text-[10px] tracking-[0.2em] active:scale-95"
+            >
+              <i className="fas fa-plus-circle mr-3 text-sm"></i> Add New Item
+            </button>
+          </div>
         </div>
-        <button
-          onClick={() => { resetForm(); setShowAddForm(true); }}
-          className="w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white px-10 py-4 rounded-2xl font-black shadow-xl shadow-blue-500/30 transition-all flex items-center justify-center uppercase text-[10px] tracking-[0.2em] active:scale-95"
-        >
-          <i className="fas fa-plus mr-3 text-sm"></i> Add New Item to Catalog
-        </button>
       </div>
 
-      <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden">
+      {/* ── MOBILE CARD VIEW (< md) ── */}
+      <div className="md:hidden space-y-3">
+        {paginatedProducts.length === 0 && filteredProducts.length === 0 && (
+          <div className="p-10 text-center text-slate-400 bg-white rounded-[2rem] border border-slate-200">
+            <i className="fas fa-box-open text-3xl opacity-40"></i>
+            <p className="text-xs font-bold uppercase tracking-widest mt-3">Your Catalog is Empty</p>
+            <p className="text-[10px] mt-1">Add your first product to start tracking inventory.</p>
+          </div>
+        )}
+        {paginatedProducts.length === 0 && filteredProducts.length > 0 && (
+          <div className="p-10 text-center text-slate-400 bg-white rounded-[2rem] border border-slate-200">
+            <i className="fas fa-search text-3xl opacity-20"></i>
+            <p className="text-xs font-bold uppercase tracking-widest">No matching products found</p>
+            <button onClick={() => setSearchTerm('')} className="mt-4 text-[10px] font-black text-blue-600 uppercase tracking-widest underline">Clear Search</button>
+          </div>
+        )}
+        {paginatedProducts.map(product => {
+          const id = product.id || (product as any).Id || '';
+          const name = product.name || (product as any).Name || 'Unnamed Product';
+          const sku = product.sku || (product as any).Sku || 'NO SKU';
+          const price = product.price ?? (product as any).Price ?? 0;
+          const category = product.category || (product as any).Category || 'General';
+          const stock = product.stock ?? (product as any).Stock ?? 0;
+          const unitPerPack = product.unitPerPack ?? (product as any).UnitPerPack ?? '';
+          const hsnCode = product.hsnCode ?? (product as any).HsnCode ?? '';
+          const description = product.description || (product as any).Description || 'No description.';
+          const isExpanded = id && id === expandedProductId;
+          const stockColor = stock > 10 ? 'text-emerald-600 bg-emerald-50' : stock > 0 ? 'text-amber-600 bg-amber-50' : 'text-red-600 bg-red-50';
+
+          return (
+            <div key={id || Math.random()} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+              <div className="p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-black uppercase tracking-tight text-slate-900 text-sm truncate">{name}</p>
+                    <p className="text-[10px] font-mono text-slate-400 uppercase mt-0.5">{sku} · {category}</p>
+                  </div>
+                  <span className={`flex-shrink-0 text-xs font-black px-2.5 py-1 rounded-lg ${stockColor}`}>{stock} pcs</span>
+                </div>
+                <div className="flex items-center justify-between mt-3 pt-3 border-t border-slate-100">
+                  <div>
+                    <p className="text-lg font-black text-slate-900">{currencySymbol}{price.toLocaleString()}</p>
+                    {(unitPerPack || hsnCode) && (
+                      <p className="text-[10px] text-slate-400 mt-0.5">
+                        {unitPerPack ? `Pack: ${unitPerPack}` : ''}{unitPerPack && hsnCode ? ' · ' : ''}{hsnCode ? `HSN: ${hsnCode}` : ''}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => setExpandedProductId(isExpanded ? '' : id)} className="p-2.5 rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50 active:scale-95 transition-all">
+                      <i className={`fas ${isExpanded ? 'fa-chevron-up' : 'fa-info-circle'} text-xs`}></i>
+                    </button>
+                    <button onClick={(e) => startEdit(e, product)} className="p-2.5 rounded-xl border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 active:scale-95 transition-all">
+                      <i className="fas fa-edit text-xs"></i>
+                    </button>
+                    <button onClick={(e) => deleteProduct(e, id)} className="p-2.5 rounded-xl border border-red-200 bg-red-50 text-red-700 hover:bg-red-100 active:scale-95 transition-all">
+                      <i className="fas fa-trash text-xs"></i>
+                    </button>
+                  </div>
+                </div>
+                {isExpanded && (
+                  <div className="mt-3 pt-3 border-t border-slate-100 bg-blue-50/50 rounded-xl p-3 text-[11px] text-slate-600 space-y-1">
+                    <p><span className="font-black">Description:</span> {description}</p>
+                    <p><span className="font-black">Supplier:</span> {product.supplier || (product as any).Supplier || 'Unknown'}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* ── DESKTOP TABLE VIEW (md+) ── */}
+      <div className="hidden md:block bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden">
         <div className="overflow-x-auto custom-scrollbar">
           <table className="min-w-full text-left">
             <thead className="bg-slate-50 sticky top-0 z-10 border-b border-slate-200/60">
@@ -258,24 +345,9 @@ const ProductManager: React.FC<Props> = ({ products, onDataChange, activeCompany
                       <td className="p-3 text-slate-500">{unitPerPack || '-'}</td>
                       <td className="p-3 text-slate-500">{hsnCode || '-'}</td>
                       <td className="p-3 text-right space-x-1">
-                        <button
-                          onClick={() => setExpandedProductId(isExpanded ? '' : id)}
-                          className="px-3 py-1.5 rounded-xl border border-slate-200 text-[10px] uppercase tracking-widest font-black text-slate-600 hover:bg-slate-100"
-                        >
-                          {isExpanded ? 'Hide' : 'Details'}
-                        </button>
-                        <button
-                          onClick={(e) => startEdit(e, product)}
-                          className="px-3 py-1.5 rounded-xl border border-blue-200 bg-blue-50 text-[10px] uppercase tracking-widest font-black text-blue-700 hover:bg-blue-100"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={(e) => deleteProduct(e, id)}
-                          className="px-3 py-1.5 rounded-xl border border-red-200 bg-red-50 text-[10px] uppercase tracking-widest font-black text-red-700 hover:bg-red-100"
-                        >
-                          Delete
-                        </button>
+                        <button onClick={() => setExpandedProductId(isExpanded ? '' : id)} className="px-3 py-1.5 rounded-xl border border-slate-200 text-[10px] uppercase tracking-widest font-black text-slate-600 hover:bg-slate-100">{isExpanded ? 'Hide' : 'Details'}</button>
+                        <button onClick={(e) => startEdit(e, product)} className="px-3 py-1.5 rounded-xl border border-blue-200 bg-blue-50 text-[10px] uppercase tracking-widest font-black text-blue-700 hover:bg-blue-100">Edit</button>
+                        <button onClick={(e) => deleteProduct(e, id)} className="px-3 py-1.5 rounded-xl border border-red-200 bg-red-50 text-[10px] uppercase tracking-widest font-black text-red-700 hover:bg-red-100">Delete</button>
                       </td>
                     </tr>
                     {isExpanded && (
@@ -294,7 +366,6 @@ const ProductManager: React.FC<Props> = ({ products, onDataChange, activeCompany
             </tbody>
           </table>
         </div>
-
         {filteredProducts.length === 0 && (
           <div className="p-10 text-center text-slate-400">
             <i className="fas fa-box-open text-3xl opacity-40"></i>
@@ -302,7 +373,6 @@ const ProductManager: React.FC<Props> = ({ products, onDataChange, activeCompany
             <p className="text-[10px] mt-1">Add your first product to start tracking inventory and managing sales.</p>
           </div>
         )}
-
         {filteredProducts.length > 0 && paginatedProducts.length === 0 && (
           <div className="p-10 text-center text-slate-400">
             <i className="fas fa-search text-3xl opacity-20"></i>
@@ -502,6 +572,223 @@ const ProductManager: React.FC<Props> = ({ products, onDataChange, activeCompany
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {showBulkModal && (
+        <div className="fixed inset-0 bg-slate-900/80 z-[90] flex items-center justify-center p-2 sm:p-4 overflow-y-auto custom-scrollbar">
+          <div className="bg-white rounded-[2rem] md:rounded-[3rem] w-full max-w-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 my-4 md:my-8 flex flex-col max-h-[90vh]">
+            <div className="bg-slate-50 px-8 py-7 border-b border-slate-200 flex justify-between items-center flex-shrink-0">
+              <div>
+                <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">Bulk Catalog Import</h3>
+                <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">Import multiple products via CSV/Excel</p>
+              </div>
+              <button onClick={() => { setShowBulkModal(false); setBulkPreview([]); setBulkFile(null); }} className="text-slate-400 hover:text-slate-600 p-2 transition-colors">
+                <i className="fas fa-times text-2xl md:text-3xl"></i>
+              </button>
+            </div>
+
+            <div className="p-6 md:p-8 space-y-6 overflow-y-auto custom-scrollbar">
+              <div className="bg-blue-50 p-6 rounded-[1.5rem] border border-blue-100 space-y-3">
+                <h4 className="text-xs font-black text-blue-800 uppercase tracking-widest flex items-center">
+                  <i className="fas fa-info-circle mr-2"></i> Import Guide
+                </h4>
+                <p className="text-[11px] text-blue-600 font-medium leading-relaxed">
+                  Prepare an Excel or CSV file with the following columns: <br />
+                  <code className="bg-blue-100 px-1.5 py-0.5 rounded font-bold text-blue-800 italic">Name, Category, SKU, Price, Description, Supplier, UnitPerPack, HSNCode</code>
+                  <br /><br />
+                  <span className="font-bold underline">Critical:</span> SKU must be unique. HSN Code should be 4, 6 or 8 digits.
+                </p>
+                <button
+                  onClick={async () => {
+                    const ExcelJS = await import('exceljs');
+                    const workbook = new ExcelJS.Workbook();
+                    const worksheet = workbook.addWorksheet('Products');
+
+                    worksheet.columns = [
+                      { header: 'Name', key: 'name', width: 25 },
+                      { header: 'Category', key: 'category', width: 15 },
+                      { header: 'SKU', key: 'sku', width: 15 },
+                      { header: 'Price', key: 'price', width: 12 },
+                      { header: 'Description', key: 'description', width: 30 },
+                      { header: 'Supplier', key: 'supplier', width: 20 },
+                      { header: 'UnitPerPack', key: 'unitPerPack', width: 12 },
+                      { header: 'HSNCode', key: 'hsnCode', width: 12 },
+                    ];
+
+                    worksheet.getRow(1).font = { bold: true };
+                    worksheet.getRow(1).fill = {
+                      type: 'pattern',
+                      pattern: 'solid',
+                      fgColor: { argb: 'FFE2E8F0' }
+                    };
+
+                    worksheet.addRow({ 
+                      name: 'Sample Item', 
+                      category: 'Hardware', 
+                      sku: 'SAMP-001', 
+                      price: 999.00, 
+                      description: 'Premium quality hardware item', 
+                      supplier: activeCompany?.supplierName || '',
+                      unitPerPack: 1,
+                      hsnCode: '8481'
+                    });
+
+                    const buffer = await workbook.xlsx.writeBuffer();
+                    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'product_import_template.xlsx';
+                    a.click();
+                  }}
+                  className="text-[10px] font-black text-blue-700 underline uppercase tracking-widest hover:text-blue-900 transition-colors flex items-center gap-2"
+                >
+                  <i className="fas fa-file-excel"></i> Download Excel Template
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Drop Catalog File</label>
+                <div className="relative group">
+                  <input
+                    type="file"
+                    accept=".csv,.xlsx,.xls"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        setBulkFile(file);
+                        const reader = new FileReader();
+                        reader.onload = (event) => {
+                          const bstr = event.target?.result;
+                          const wb = XLSX.read(bstr, { type: 'binary' });
+                          const wsname = wb.SheetNames[0];
+                          const ws = wb.Sheets[wsname];
+                          const data = XLSX.utils.sheet_to_json(ws);
+                          setBulkPreview(data);
+                        };
+                        reader.readAsBinaryString(file);
+                      }
+                    }}
+                    className="absolute inset-0 opacity-0 cursor-pointer z-10"
+                  />
+                  <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-3xl p-10 text-center group-hover:border-blue-400 transition-all">
+                    <i className="fas fa-box-open text-3xl text-slate-300 mb-3 group-hover:text-blue-500 transition-colors"></i>
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">{bulkFile ? bulkFile.name : 'Choose File or Drag Here'}</p>
+                    <p className="text-[10px] text-slate-400 mt-1 uppercase tracking-tighter">XLSX, XLS or CSV</p>
+                  </div>
+                </div>
+              </div>
+
+              {bulkPreview.length > 0 && (
+                <div className="space-y-3">
+                  <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Parsing Preview ({bulkPreview.length} Items)</h4>
+                  <div className="max-h-40 overflow-y-auto border border-slate-100 rounded-2xl bg-slate-50/50 p-3 custom-scrollbar">
+                    <table className="w-full text-left">
+                      <thead>
+                        <tr className="border-b border-slate-200">
+                          <th className="px-3 py-2 text-[9px] font-black text-slate-400 uppercase tracking-widest">Name</th>
+                          <th className="px-3 py-2 text-[9px] font-black text-slate-400 uppercase tracking-widest">SKU</th>
+                          <th className="px-3 py-2 text-[9px] font-black text-slate-400 uppercase tracking-widest">Price</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {bulkPreview.slice(0, 5).map((p, i) => {
+                          const getVal = (keys: string[]) => {
+                            const foundKey = Object.keys(p).find(k => keys.some(sk => k.toLowerCase() === sk.toLowerCase()));
+                            return foundKey ? String(p[foundKey]) : '';
+                          };
+                          return (
+                            <tr key={i} className="border-b border-slate-100/50 last:border-none">
+                              <td className="px-3 py-2 text-[10px] font-bold text-slate-600 truncate max-w-[120px]">{getVal(['name', 'product', 'item'])}</td>
+                              <td className="px-3 py-2 text-[10px] font-mono font-bold text-blue-500 uppercase">{getVal(['sku', 'code'])}</td>
+                              <td className="px-3 py-2 text-[10px] font-black text-slate-800">{currencySymbol}{getVal(['price', 'rate'])}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                    {bulkPreview.length > 5 && <p className="text-[9px] text-slate-400 text-center py-2 italic font-medium">And {bulkPreview.length - 5} more items...</p>}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex flex-col sm:flex-row justify-end gap-4 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => { setShowBulkModal(false); setBulkPreview([]); setBulkFile(null); }}
+                  className="px-8 py-3.5 font-black text-slate-400 hover:text-slate-600 text-[10px] uppercase tracking-widest rounded-2xl hover:bg-slate-50 transition-all"
+                >
+                  Discard
+                </button>
+                <button
+                  disabled={isBusy || bulkPreview.length === 0}
+                  onClick={async () => {
+                    setIsBusy(true);
+                    try {
+                      const processed = bulkPreview.map(p => {
+                        const getVal = (keys: string[]) => {
+                          const foundKey = Object.keys(p).find(k => keys.some(sk => k.toLowerCase() === sk.toLowerCase()));
+                          return foundKey ? String(p[foundKey]).trim() : '';
+                        };
+                        
+                        return {
+                          name: getVal(['name', 'product', 'item']),
+                          category: getVal(['category', 'type']),
+                          sku: getVal(['sku', 'code']).toUpperCase(),
+                          price: Number(getVal(['price', 'rate'])) || 0,
+                          description: getVal(['description', 'details', 'info']),
+                          supplier: getVal(['supplier', 'vendor']) || activeCompany?.supplierName || '',
+                          unitPerPack: Number(getVal(['unitPerPack', 'pack', 'units'])) || 1,
+                          hsnCode: getVal(['hsnCode', 'hsn', 'taxCode']),
+                          companyId: activeCompanyId,
+                          userId: currentUser.id,
+                          stock: 0
+                        };
+                      }).filter(p => p.name && p.sku && p.price > 0);
+
+                      if (processed.length === 0) {
+                        alert("Error: No valid products found. Ensure Name, SKU, and Price (numeric) are present.");
+                        setIsBusy(false);
+                        return;
+                      }
+
+                      // Check for internal SKU duplicates
+                      const skus = processed.map(x => x.sku);
+                      const internalDupes = processed.filter((p, i) => skus.indexOf(p.sku) !== i);
+                      if (internalDupes.length > 0) {
+                        alert(`Duplicate SKUs found in file: ${internalDupes.map(d => d.sku).join(', ')}`);
+                        setIsBusy(false);
+                        return;
+                      }
+
+                      // Check against existing products
+                      const systemDupes = processed.filter(p => products.some(sp => sp.sku?.toUpperCase() === p.sku));
+                      if (systemDupes.length > 0) {
+                        alert(`SKUs already exist in catalog: ${systemDupes.map(d => d.sku).join(', ')}`);
+                        setIsBusy(false);
+                        return;
+                      }
+
+                      await productService.createBulk(processed);
+                      onDataChange();
+                      setShowBulkModal(false);
+                      setBulkPreview([]);
+                      setBulkFile(null);
+                      alert(`Successfully imported ${processed.length} items to catalog!`);
+                    } catch (err: any) {
+                      alert("Import Failed: " + (err.response?.data || err.message));
+                    } finally {
+                      setIsBusy(false);
+                    }
+                  }}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-10 py-3.5 rounded-2xl font-black shadow-xl shadow-blue-500/30 transition-all uppercase text-[10px] tracking-[0.15em] flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {isBusy ? <i className="fas fa-circle-notch fa-spin"></i> : <i className="fas fa-cloud-upload-alt"></i>}
+                  {isBusy ? 'Importing...' : `Finalize Import (${bulkPreview.length} Items)`}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
