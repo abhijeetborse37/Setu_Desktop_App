@@ -1,0 +1,753 @@
+import React, { useState, useMemo } from 'react';
+import { Product, Transaction, Company, Customer, TransactionItem, User } from '../types';
+import { transactionService, customerService } from '../services/api';
+import InvoiceModal from './InvoiceModal';
+import { formatDate } from '../utils';
+import SearchableSelect from './SearchableSelect';
+
+interface Props {
+  products: Product[];
+  customers: Customer[];
+  transactions: Transaction[];
+  activeCompany: Company | null;
+  companies?: Company[];
+  currentUser: User | null;
+  onDataChange: () => void;
+}
+
+interface SaleLineItem {
+  id: string;
+  productId: string;
+  quantity: string | number;
+  price: string | number;
+  cgstRate: string | number;
+  sgstRate: string | number;
+}
+
+const COUNTRY_TAX_MAP: Record<string, string> = {
+  'India': 'GST',
+  'United States': 'Sales Tax',
+  'United Kingdom': 'VAT',
+  'European Union': 'VAT',
+  'Canada': 'HST/GST',
+  'Australia': 'GST'
+};
+
+const SalesManager: React.FC<Props> = ({ products, customers, transactions, activeCompany, companies, currentUser, onDataChange }) => {
+  const [showModal, setShowModal] = useState(false);
+  const [editingTransactionId, setEditingTransactionId] = useState<string | null>(null);
+  const [showInvoice, setShowInvoice] = useState<Transaction | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [isFiltersVisible, setIsFiltersVisible] = useState(false);
+
+  const [customerId, setCustomerId] = useState('');
+  const [newCustomerData, setNewCustomerData] = useState<{ name: string, phone: string, gst: string, email: string } | null>(null);
+  const [saleDate, setSaleDate] = useState(new Date().toISOString().split('T')[0]);
+  const [invoiceNumber, setInvoiceNumber] = useState('');
+  const [roundOff, setRoundOff] = useState<string | number>('');
+  const [lineItems, setLineItems] = useState<SaleLineItem[]>([
+    { id: '1', productId: '', quantity: '', price: '', cgstRate: '', sgstRate: '' }
+  ]);
+
+  const autoInvoiceNumber = useMemo(() => {
+    const saleInvoices = transactions
+      .filter(t => t.type === 'SALE' && t.invoiceNumber)
+      .map(t => {
+        const numMatch = t.invoiceNumber.match(/^\d+$/);
+        return numMatch ? parseInt(numMatch[0], 10) : 0;
+      });
+    const maxNum = saleInvoices.length > 0 ? Math.max(...saleInvoices) : 0;
+    return (maxNum + 1).toString();
+  }, [transactions]);
+
+  const addLineItem = () => {
+    setLineItems([...lineItems, { id: Math.random().toString(), productId: '', quantity: '', price: '', cgstRate: '', sgstRate: '' }]);
+  };
+
+  const removeLineItem = (id: string) => {
+    if (lineItems.length > 1) {
+      setLineItems(lineItems.filter(item => item.id !== id));
+    }
+  };
+
+  const updateLineItem = (id: string, field: keyof SaleLineItem, value: any) => {
+    setLineItems(lineItems.map(item => {
+      if (item.id === id) {
+        const updated = { ...item, [field]: value };
+        if (field === 'productId') {
+          const product = products.find(p => p.id === value);
+          if (product) {
+            updated.price = product.price;
+            updated.cgstRate = product.cgstRate || '';
+            updated.sgstRate = product.sgstRate || '';
+          }
+        }
+        return updated;
+      }
+      return item;
+    }));
+  };
+
+  const saleSummary = useMemo(() => {
+    let subtotal = 0;
+    let totalTax = 0;
+    let cgstTotal = 0;
+    let sgstTotal = 0;
+    lineItems.forEach(item => {
+      const q = Number(item.quantity) || 0;
+      const p = Number(item.price) || 0;
+      const ctr = Number(item.cgstRate) || 0;
+      const str = Number(item.sgstRate) || 0;
+      const tr = ctr + str;
+      const lineTotal = q * p;
+      subtotal += lineTotal;
+      cgstTotal += lineTotal * (ctr / 100);
+      sgstTotal += lineTotal * (str / 100);
+      totalTax += lineTotal * (tr / 100);
+    });
+    const ro = Number(roundOff) || 0;
+    return { subtotal, totalTax, cgstTotal, sgstTotal, roundOff: ro, grandTotal: subtotal + totalTax + ro };
+  }, [lineItems, roundOff]);
+
+  const filteredTransactions = useMemo(() => {
+    return transactions
+      .filter(t => t.type === 'SALE')
+      .filter(t => {
+        const matchesSearch = t.entityName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          t.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesStart = startDate ? t.date >= startDate : true;
+        const matchesEnd = endDate ? t.date <= endDate : true;
+        return matchesSearch && matchesStart && matchesEnd;
+      })
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [transactions, searchTerm, startDate, endDate]);
+
+  const totalPages = Math.ceil(filteredTransactions.length / itemsPerPage);
+  const paginatedTransactions = filteredTransactions.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
+  const [isBusy, setIsBusy] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isBusy) return;
+    setIsBusy(true);
+
+    const currentLineItems = lineItems;
+    const currentSaleDate = saleDate;
+    const currentSummary = saleSummary;
+
+    let activeCustomerId = customerId;
+    let activeCustomerName = '';
+    let activeCustomerGst = '';
+
+    if (!activeCustomerId && newCustomerData) {
+      // Create new customer on the fly
+      try {
+        // Ensure all required fields are provided for the backend CRM
+        const newCustRes = await customerService.create({
+          name: newCustomerData.name,
+          phone: newCustomerData.phone,
+          email: newCustomerData.email || `${newCustomerData.name.toLowerCase().replace(/\s/g, '.')}@temp.com`,
+          address: 'Direct Sale Customer',
+          group: 'New',
+          gstPanId: newCustomerData.gst,
+          companyId: activeCompany?.id || '',
+          userId: currentUser.id,
+          totalSpent: 0
+        });
+        activeCustomerId = newCustRes.data.id;
+        activeCustomerName = newCustomerData.name;
+        activeCustomerGst = newCustomerData.gst;
+      } catch (err: any) {
+        setIsBusy(false);
+        const errorMsg = err.response?.data?.message || err.response?.data || err.message;
+        alert("Failed to Register New Customer: " + errorMsg);
+        return;
+      }
+    } else {
+      const customer = customers.find(c => c.id === activeCustomerId);
+      if (!customer) {
+        setIsBusy(false);
+        alert("Please select a valid customer.");
+        return;
+      }
+      activeCustomerName = customer.name;
+      activeCustomerGst = customer.gstPanId || '';
+    }
+
+    const transactionItems: any[] = currentLineItems.map(line => {
+      const qty = Number(line.quantity) || 0;
+      const price = Number(line.price) || 0;
+      const cRate = Number(line.cgstRate) || 0;
+      const sRate = Number(line.sgstRate) || 0;
+      const tr = cRate + sRate;
+
+      const cgstAmount = (qty * price) * (cRate / 100);
+      const sgstAmount = (qty * price) * (sRate / 100);
+      const taxAmount = cgstAmount + sgstAmount;
+      const totalAmount = (qty * price) + taxAmount;
+
+      // Get product name from products array
+      const product = products.find(p => p.id === line.productId);
+      const productName = product?.name || 'Unknown Product';
+
+      return {
+        productId: line.productId,
+        productName: productName,
+        hsnCode: product?.hsnCode,
+        quantity: qty,
+        unitPrice: price,
+        taxRate: tr,
+        taxAmount,
+        cgstRate: cRate,
+        sgstRate: sRate,
+        cgstAmount,
+        sgstAmount,
+        totalAmount
+      };
+    });
+
+    setIsBusy(true);
+
+    try {
+      const transactionData: any = {
+        type: 'SALE',
+        items: transactionItems,
+        totalAmount: currentSummary.grandTotal,
+        totalTax: currentSummary.totalTax,
+        cgstTotal: currentSummary.cgstTotal,
+        sgstTotal: currentSummary.sgstTotal,
+        roundOff: currentSummary.roundOff,
+        date: currentSaleDate,
+        invoiceNumber: invoiceNumber || autoInvoiceNumber,
+        entityName: activeCustomerName,
+        entityGstNumber: activeCustomerGst,
+        companyId: activeCompany?.id || '',
+        userId: currentUser.id
+      };
+
+      if (editingTransactionId) {
+        transactionData.id = editingTransactionId;
+        // Find existing transaction to keep and pass back its invoice number
+        const existing = transactions.find(t => t.id === editingTransactionId);
+        if (existing) {
+          transactionData.invoiceNumber = existing.invoiceNumber;
+        }
+        await transactionService.update(editingTransactionId, transactionData);
+      } else {
+        await transactionService.create(transactionData);
+      }
+      onDataChange();
+      setShowModal(false);
+      resetForm();
+    } catch (err: any) {
+      console.error("Save Error:", err.response?.data || err);
+      const msg = typeof err.response?.data === 'string' ? err.response.data : JSON.stringify(err.response?.data) || err.message;
+      alert("Save Error: " + msg);
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  const handleEdit = (t: Transaction) => {
+    const customer = customers.find(c => c.name === t.entityName);
+    setCustomerId(customer?.id || '');
+    setSaleDate(t.date.split('T')[0]);
+    setInvoiceNumber(t.invoiceNumber || '');
+    setEditingTransactionId(t.id);
+    setRoundOff(t.roundOff || '');
+    setLineItems(t.items.map(item => ({
+      id: Math.random().toString(),
+      productId: item.productId,
+      quantity: item.quantity,
+      price: item.unitPrice,
+      cgstRate: item.cgstRate || (item.taxRate ? item.taxRate / 2 : ''),
+      sgstRate: item.sgstRate || (item.taxRate ? item.taxRate / 2 : '')
+    })));
+    setShowModal(true);
+  };
+
+  const handleDelete = async (e: React.MouseEvent, id: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (window.confirm("Are you sure you want to delete this sale?")) {
+      try {
+        await transactionService.delete(id);
+        onDataChange();
+      } catch (err) {
+        alert("Failed to delete sale record.");
+      }
+    }
+  };
+
+  const resetForm = () => {
+    setCustomerId('');
+    setNewCustomerData(null);
+    setEditingTransactionId(null);
+    setRoundOff('');
+    setInvoiceNumber('');
+    setSaleDate(new Date().toISOString().split('T')[0]);
+    setLineItems([{ id: '1', productId: '', quantity: '', price: '', cgstRate: '', sgstRate: '' }]);
+  };
+
+  const symbol = activeCompany?.currencySymbol || '$';
+  const taxLabel = activeCompany ? (COUNTRY_TAX_MAP[activeCompany.country] || 'Tax') : 'Tax';
+
+  return (
+    <div className="space-y-6 animate-in slide-in-from-bottom-2 duration-300">
+      <div className="flex flex-col lg:flex-row justify-between lg:items-center gap-6">
+        <div>
+          <h1 className="text-3xl font-black text-slate-900 tracking-tight">Billing & Sales</h1>
+          <p className="text-[10px] text-slate-400 font-bold tracking-[0.2em]">Invoice Generation & Revenue Tracking</p>
+        </div>
+        <div className="flex w-full lg:w-auto gap-3 print-hidden">
+          <button
+            onClick={() => { resetForm(); setShowModal(true); }}
+            className="flex-1 lg:flex-none bg-slate-900 hover:bg-black text-white px-8 py-3.5 rounded-2xl font-black shadow-xl shadow-slate-200 flex items-center justify-center transition-all uppercase text-[10px] tracking-[0.15em]"
+          >
+            <i className="fas fa-plus-circle mr-2 text-blue-400"></i> Create New Invoice
+          </button>
+        </div>
+      </div>
+
+
+
+      <div className="bg-white rounded-3xl border border-slate-200/60 shadow-sm overflow-hidden no-print ring-4 ring-slate-100/50 transition-all duration-300">
+        <div className="p-5 md:p-6 space-y-6">
+          {/* Header & Search Row */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex-1 max-w-2xl relative group">
+              <input
+                type="text"
+                placeholder="Search by invoice or customer name..."
+                className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-3.5 px-5 pl-12 text-sm focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 outline-none transition-all shadow-sm"
+                value={searchTerm}
+                onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+              />
+              <i className="fas fa-search absolute left-4.5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-blue-500 transition-colors pointer-events-none"></i>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setIsFiltersVisible(!isFiltersVisible)}
+                className={`flex items-center gap-2 px-5 py-3.5 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all ${isFiltersVisible ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'}`}
+              >
+                <i className={`fas ${isFiltersVisible ? 'fa-filter-circle-xmark' : 'fa-filter'} text-sm`}></i>
+                {isFiltersVisible ? 'Hide Filters' : 'Advanced Filters'}
+              </button>
+              {(searchTerm || startDate || endDate) && (
+                <button
+                  onClick={() => { setSearchTerm(''); setStartDate(''); setEndDate(''); setCurrentPage(1); }}
+                  className="p-3.5 bg-red-50 text-red-500 rounded-2xl hover:bg-red-100 transition-all"
+                  title="Reset All Filters"
+                >
+                  <i className="fas fa-undo-alt text-sm"></i>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Collapsible Filter Content */}
+          {isFiltersVisible && (
+            <div className="pt-6 border-t border-slate-100 grid grid-cols-1 md:grid-cols-3 gap-6 animate-in slide-in-from-top-4 duration-300">
+              <div className="md:col-span-2">
+                <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-2.5 ml-1">Filter by Date Range</label>
+                <div className="flex items-center gap-3">
+                  <div className="relative flex-1">
+                    <input
+                      type="date"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-none hover:bg-slate-100 transition-colors"
+                      value={startDate}
+                      onChange={e => { setStartDate(e.target.value); setCurrentPage(1); }}
+                    />
+                    <span className="absolute -top-2 left-3 bg-white px-1 text-[8px] font-black text-slate-400 uppercase">From</span>
+                  </div>
+                  <div className="text-slate-300 font-bold">to</div>
+                  <div className="relative flex-1">
+                    <input
+                      type="date"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-none hover:bg-slate-100 transition-colors"
+                      value={endDate}
+                      onChange={e => { setEndDate(e.target.value); setCurrentPage(1); }}
+                    />
+                    <span className="absolute -top-2 left-3 bg-white px-1 text-[8px] font-black text-slate-400 uppercase">To</span>
+                  </div>
+                </div>
+              </div>
+              <div>
+                <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-2.5 ml-1">Records Per Page</label>
+                <select
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-none appearance-none cursor-pointer hover:bg-slate-100 transition-colors"
+                  value={itemsPerPage}
+                  onChange={e => { setItemsPerPage(Number(e.target.value)); setCurrentPage(1); }}
+                >
+                  <option value={10}>Show 10 Records</option>
+                  <option value={20}>Show 20 Records</option>
+                  <option value={50}>Show 50 Records</option>
+                  <option value={100}>Show 100 Records</option>
+                </select>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden print:border-none print:shadow-none">
+
+        {/* Mobile Card View */}
+        <div className="md:hidden divide-y divide-slate-100">
+          {paginatedTransactions.map(t => (
+            <div key={t.id} className="p-4 space-y-3">
+              <div className="flex justify-between items-start">
+                <div>
+                  <span className="inline-block px-2 py-1 bg-emerald-50 text-emerald-600 rounded text-[10px] font-black font-mono tracking-tight uppercase mb-1">
+                    {t.invoiceNumber}
+                  </span>
+                  <h4 className="font-bold text-slate-800 text-sm uppercase tracking-tight">{t.entityName}</h4>
+                </div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{formatDate(t.date)}</span>
+              </div>
+
+              <div className="flex items-center gap-2 pl-2 border-l-2 border-emerald-100">
+                <span className="bg-slate-100 text-slate-500 px-2 py-1 rounded text-[10px] font-black uppercase tracking-wider">
+                  {t.items.length} {t.items.length === 1 ? 'Item' : 'Items'}
+                </span>
+                <span className="text-[10px] text-slate-400 uppercase font-bold tracking-widest truncate max-w-[150px]">
+                  {t.items.map(i => i.productName).join(', ').substring(0, 30)}...
+                </span>
+              </div>
+
+              <div className="flex justify-between items-end pt-2">
+                <div>
+                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Total Sale</p>
+                  <p className="text-lg font-black text-slate-900 leading-none">{symbol}{t.totalAmount.toLocaleString()}</p>
+                </div>
+                <div className="flex space-x-2">
+                  <button onClick={() => setShowInvoice(t)} className="p-2 bg-blue-50 text-blue-600 rounded-lg shadow-sm hover:bg-blue-100 transition-colors">
+                    <i className="fas fa-file-invoice text-xs"></i>
+                  </button>
+                  <button onClick={() => handleEdit(t)} className="p-2 bg-slate-50 text-slate-600 rounded-lg shadow-sm hover:bg-slate-100 transition-colors">
+                    <i className="fas fa-pencil-alt text-xs"></i>
+                  </button>
+                  <button onClick={(e) => handleDelete(e, t.id)} className="p-2 bg-red-50 text-red-600 rounded-lg shadow-sm hover:bg-red-100 transition-colors">
+                    <i className="fas fa-trash text-xs"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+          {paginatedTransactions.length === 0 && (
+            <div className="p-8 text-center text-slate-400 text-xs font-bold uppercase tracking-widest">
+              No sales records found
+            </div>
+          )}
+        </div>
+
+        {/* Desktop Table View */}
+        <div className="hidden md:block overflow-x-auto custom-scrollbar">
+          <table className="w-full text-left whitespace-nowrap min-w-[600px]">
+            <thead className="sticky top-0 z-10">
+              <tr className="bg-slate-50 border-b border-slate-200/60">
+                <th className="px-6 py-5 font-bold text-slate-500 text-[10px] uppercase tracking-widest">Invoice</th>
+                <th className="px-6 py-4 font-bold text-slate-600 text-[10px] uppercase tracking-widest">Customer</th>
+                <th className="px-6 py-4 font-bold text-slate-600 text-[10px] uppercase tracking-widest text-center">Lines</th>
+                <th className="px-6 py-4 font-bold text-slate-600 text-[10px] uppercase tracking-widest text-right">Total</th>
+                <th className="px-6 py-4 font-bold text-slate-600 text-[10px] uppercase tracking-widest text-right">Date</th>
+                <th className="px-6 py-4 font-bold text-slate-600 text-[10px] uppercase tracking-widest text-right print:hidden">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {paginatedTransactions.map(t => (
+                <tr key={t.id} className="hover:bg-blue-50/30 transition-colors group even:bg-slate-50/50">
+                  <td className="px-6 py-4 font-mono text-xs text-emerald-600 font-bold">{t.invoiceNumber}</td>
+                  <td className="px-6 py-4 font-medium text-slate-800 text-sm">{t.entityName}</td>
+                  <td className="px-6 py-4 text-center">
+                    <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded text-[10px] font-bold">{t.items.length}</span>
+                  </td>
+                  <td className="px-6 py-4 text-right font-black text-slate-800 text-sm">{symbol}{t.totalAmount.toLocaleString()}</td>
+                  <td className="px-6 py-4 text-right text-slate-400 text-xs font-bold">{formatDate(t.date)}</td>
+                  <td className="px-6 py-4 text-right print:hidden">
+                    <div className="flex justify-end items-center space-x-1">
+                      <button onClick={() => setShowInvoice(t)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-all">
+                        <i className="fas fa-file-invoice text-sm"></i>
+                      </button>
+                      <button onClick={() => handleEdit(t)} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all">
+                        <i className="fas fa-pencil-alt text-sm"></i>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {paginatedTransactions.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-6 py-12 text-center text-slate-400 text-xs italic">No sales found in system.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Pagination Controls */}
+      <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mt-6 no-print">
+        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+          Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, filteredTransactions.length)} of {filteredTransactions.length} records
+        </p>
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+            disabled={currentPage === 1}
+            className="px-4 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all uppercase tracking-widest"
+          >
+            Previous
+          </button>
+          <div className="flex space-x-1">
+            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+              let pageNum = i + 1;
+              if (totalPages > 5 && currentPage > 3) {
+                pageNum = currentPage - 3 + i + 1; // Center current page
+                if (pageNum > totalPages) pageNum = totalPages - (4 - i);
+              }
+              const isCurrent = pageNum === currentPage;
+              if (pageNum > 0 && pageNum <= totalPages) {
+                return (
+                  <button
+                    key={pageNum}
+                    onClick={() => setCurrentPage(pageNum)}
+                    className={`w-8 h-8 rounded-lg text-[10px] font-black transition-all ${isCurrent
+                      ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
+                      : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+                      }`}
+                  >
+                    {pageNum}
+                  </button>
+                );
+              }
+              return null;
+            })}
+          </div>
+          <button
+            onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+            disabled={currentPage === totalPages || totalPages === 0}
+            className="px-4 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all uppercase tracking-widest"
+          >
+            Next
+          </button>
+        </div>
+      </div>
+
+      {
+        showModal && (
+          <div className="fixed inset-0 bg-slate-900/80 z-[70] flex items-center justify-center p-2 sm:p-4 no-print overflow-y-auto">
+            <div className="bg-white rounded-3xl w-full max-w-md sm:max-w-lg md:max-w-2xl lg:max-w-4xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 my-8">
+              <div className="bg-white px-8 py-6 border-b border-slate-100 flex justify-between items-center bg-gradient-to-r from-slate-50 to-white">
+                <div>
+                  <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight">{editingTransactionId ? 'Edit Invoice' : 'New Invoice'}</h3>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em]">Transaction Registry & Itemization</p>
+                </div>
+                <button onClick={() => setShowModal(false)} className="w-10 h-10 rounded-full bg-slate-100 text-slate-400 hover:bg-red-50 hover:text-red-500 flex items-center justify-center transition-all">
+                  <i className="fas fa-times"></i>
+                </button>
+              </div>
+              <form onSubmit={handleSubmit} className="p-8 space-y-8 max-h-[80vh] overflow-y-auto custom-scrollbar scroll-smooth">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 pb-8 border-b border-slate-100">
+                  <div className="lg:col-span-1">
+                    <SearchableSelect
+                      label="Client Selection *"
+                      placeholder="Search or type new name..."
+                      options={[
+                        ...customers.map(c => ({ id: c.id, name: c.name, subtext: c.gstPanId || 'No GST ID' })),
+                        ...(newCustomerData ? [{ id: '__NEW__', name: newCustomerData.name, subtext: 'QUICK REGISTERING...' }] : [])
+                      ]}
+                      value={customerId || (newCustomerData ? '__NEW__' : '')}
+                      onChange={val => {
+                        setCustomerId(val);
+                        setNewCustomerData(null);
+                      }}
+                      onCustomCreate={name => {
+                        setCustomerId('');
+                        setNewCustomerData({ name, phone: '', gst: '', email: '' });
+                      }}
+                    />
+                  </div>
+                  {newCustomerData && (
+                    <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-3 animate-in fade-in slide-in-from-left-2 duration-300">
+                      <div>
+                        <label className="block text-[10px] font-bold text-emerald-600 uppercase mb-2 tracking-widest leading-none">Phone</label>
+                        <input
+                          required
+                          type="text"
+                          className="w-full bg-emerald-50/50 border border-emerald-100 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500 text-sm placeholder:text-emerald-200"
+                          placeholder="Phone No"
+                          value={newCustomerData.phone}
+                          onChange={e => setNewCustomerData({ ...newCustomerData, phone: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-emerald-600 uppercase mb-2 tracking-widest leading-none">Email</label>
+                        <input
+                          type="email"
+                          className="w-full bg-emerald-50/50 border border-emerald-100 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500 text-sm placeholder:text-emerald-200"
+                          placeholder="Optional"
+                          value={newCustomerData.email}
+                          onChange={e => setNewCustomerData({ ...newCustomerData, email: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-emerald-600 uppercase mb-2 tracking-widest leading-none">GST/PAN</label>
+                        <input
+                          type="text"
+                          className="w-full bg-emerald-50/50 border border-emerald-100 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-emerald-500 text-sm placeholder:text-emerald-200"
+                          placeholder="Optional ID"
+                          value={newCustomerData.gst}
+                          onChange={e => setNewCustomerData({ ...newCustomerData, gst: e.target.value })}
+                        />
+                      </div>
+                      <div className="sm:col-span-3 flex items-center space-x-2 bg-emerald-50/30 p-2 rounded-lg border border-emerald-50">
+                        <i className="fas fa-info-circle text-emerald-500 text-xs"></i>
+                        <p className="text-[9px] text-emerald-600 font-bold uppercase tracking-widest">
+                          Registering <strong>{newCustomerData.name}</strong> as a new customer in your system.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                  {!newCustomerData && (
+                    <>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-2">Invoice No</label>
+                        <input type="text" disabled className="w-full bg-slate-100 text-slate-400 border border-slate-200 rounded-xl px-4 py-3 outline-none cursor-not-allowed font-mono font-bold text-sm"
+                          value={invoiceNumber || (!editingTransactionId ? autoInvoiceNumber : '')} />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-2">Billing Date</label>
+                        <input required type="date" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                          value={saleDate} onChange={e => setSaleDate(e.target.value)} />
+                      </div>
+                    </>
+                  )}
+                  {newCustomerData && (
+                    <div className="md:col-span-3 grid grid-cols-2 gap-4 pt-4 border-t border-emerald-50">
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-2">Invoice No</label>
+                        <input type="text" disabled className="w-full bg-slate-100 text-slate-400 border border-slate-200 rounded-xl px-4 py-3 outline-none cursor-not-allowed font-mono font-bold text-sm"
+                          value={invoiceNumber || (!editingTransactionId ? autoInvoiceNumber : '')} />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase mb-2">Billing Date</label>
+                        <input required type="date" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                          value={saleDate} onChange={e => setSaleDate(e.target.value)} />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-6">
+                  <div className="flex justify-between items-center">
+                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Itemized Particulars</h4>
+                    <button type="button" onClick={addLineItem} className="bg-blue-50 text-blue-600 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 hover:text-white transition-all flex items-center shadow-sm">
+                      <i className="fas fa-plus-circle mr-2"></i> Add Product
+                    </button>
+                  </div>
+
+                  <div className="space-y-4">
+                    {lineItems.map((item) => {
+                      const selectedProduct = products.find(p => p.id === item.productId);
+
+                      return (
+                        <div key={item.id} className="bg-slate-50/50 p-6 rounded-[1.5rem] border border-slate-100 relative group hover:border-blue-200 transition-all">
+                          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-end">
+                            <div className="lg:col-span-4">
+                              <SearchableSelect
+                                label="Product / Service *"
+                                placeholder="Search inventory..."
+                                options={products.map(p => {
+                                  const biz = companies?.find(c => c.id === p.companyId);
+                                  return {
+                                    id: p.id,
+                                    name: p.name,
+                                    subtext: `${biz?.name ? `[${biz.name}] ` : ''}STOCK: ${p.stock} | RATE: ${symbol}${p.price}`
+                                  };
+                                })}
+                                value={item.productId}
+                                onChange={val => updateLineItem(item.id, 'productId', val)}
+                              />
+                            </div>
+                            <div className="grid grid-cols-2 md:grid-cols-4 md:col-span-7 gap-3">
+                              <div className="col-span-1">
+                                <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Qty</label>
+                                <input required type="number" min="1" className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-xs outline-none"
+                                  value={item.quantity} onChange={e => updateLineItem(item.id, 'quantity', e.target.value)} />
+                              </div>
+                              <div className="col-span-1">
+                                <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Price</label>
+                                <input required type="number" step="0.01" className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-xs outline-none"
+                                  value={item.price} onChange={e => updateLineItem(item.id, 'price', e.target.value)} />
+                              </div>
+                              <div className="col-span-1">
+                                <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">CGST%</label>
+                                <input required type="number" className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-xs outline-none"
+                                  value={item.cgstRate} onChange={e => updateLineItem(item.id, 'cgstRate', e.target.value)} />
+                              </div>
+                              <div className="col-span-1">
+                                <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">SGST%</label>
+                                <input required type="number" className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-xs outline-none"
+                                  value={item.sgstRate} onChange={e => updateLineItem(item.id, 'sgstRate', e.target.value)} />
+                              </div>
+                            </div>
+                            <div className="md:col-span-1 flex justify-end md:justify-center md:pb-2.5">
+                              <button type="button" onClick={() => removeLineItem(item.id)} className="text-red-400 hover:text-red-600 p-2 transition-colors">
+                                <i className="fas fa-trash-alt text-lg md:text-sm"></i>
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="flex justify-end pt-4">
+                  <div className="w-full md:w-64 space-y-2 border-t border-slate-100 pt-6">
+                    <div className="flex justify-between text-[10px] font-bold text-slate-400">
+                      <span className="uppercase tracking-widest">Subtotal</span>
+                      <span className="font-black text-slate-600">{symbol}{saleSummary.subtotal.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between text-[10px] font-bold text-slate-400">
+                      <span className="uppercase tracking-widest">Tax (Total)</span>
+                      <span className="font-black text-slate-600">{symbol}{saleSummary.totalTax.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between items-center mt-2">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Round Off</span>
+                      <input type="number" step="0.01" placeholder="0.00" className="w-24 bg-white border border-slate-200 rounded-lg px-2 py-1 text-right font-black text-slate-600 outline-none focus:ring-1 focus:ring-blue-500" value={roundOff} onChange={e => setRoundOff(e.target.value)} />
+                    </div>
+                    <div className="flex justify-between items-end text-slate-900 border-t border-slate-200 pt-3 mt-2">
+                      <span className="text-[10px] font-black uppercase tracking-widest">Grand Total</span>
+                      <span className="text-xl font-black text-blue-600 leading-none">{symbol}{saleSummary.grandTotal.toLocaleString()}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-6 border-t border-slate-100 flex flex-col sm:flex-row justify-end gap-3">
+                  <button type="button" onClick={() => setShowModal(false)} className="px-6 py-3 font-bold text-slate-400 hover:text-slate-600 uppercase text-[10px] tracking-widest text-center order-2 sm:order-1">Discard</button>
+                  <button type="submit" className="bg-emerald-600 hover:bg-emerald-700 text-white px-10 py-3 rounded-2xl font-bold shadow-lg shadow-emerald-500/30 transition-all uppercase text-[10px] tracking-widest text-center order-1 sm:order-2">
+                    {editingTransactionId ? 'Save Invoice Updates' : 'Finalize & Generate Invoice'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )
+      }
+
+      {showInvoice && <InvoiceModal transaction={showInvoice} company={activeCompany} customer={customers.find(c => c.name === showInvoice.entityName) || null} onClose={() => setShowInvoice(null)} />}
+    </div >
+  );
+};
+
+export default SalesManager;

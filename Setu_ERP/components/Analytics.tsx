@@ -1,0 +1,302 @@
+
+import React, { useState, useMemo, useEffect } from 'react';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, LineChart, Line, XAxis, YAxis, CartesianGrid } from 'recharts';
+import { Company, Product, Transaction } from '../types';
+import { formatDate } from '../utils';
+
+interface Props {
+  company: Company | null;
+  products: Product[];
+  transactions: Transaction[];
+}
+
+const Analytics: React.FC<Props> = ({ company, products, transactions }) => {
+  const [startDate, setStartDate] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]);
+  const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
+  const [transactionType, setTransactionType] = useState<'ALL' | 'PURCHASE' | 'SALE'>('ALL');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [isFiltersVisible, setIsFiltersVisible] = useState(false);
+
+  // Define useMemo BEFORE early return
+  const filteredTransactions = useMemo(() => {
+    return transactions.filter(t => {
+      // API dates are "YYYY-MM-DDTHH:mm:ss", pickers are "YYYY-MM-DD"
+      const tDate = t.date.split('T')[0];
+      const dateMatch = tDate >= startDate && tDate <= endDate;
+      const typeMatch = transactionType === 'ALL' || t.type === transactionType;
+      return dateMatch && typeMatch;
+    });
+  }, [transactions, startDate, endDate, transactionType]);
+
+  const totalPages = Math.ceil(filteredTransactions.length / itemsPerPage);
+  const paginatedTransactions = filteredTransactions.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [startDate, endDate, transactionType]);
+
+  // Now safe to do early return
+  if (!company) return (
+    <div className="py-20 text-center text-slate-400">Select a company to view reports.</div>
+  );
+
+  const handleDownloadReport = () => {
+    if (filteredTransactions.length === 0) {
+      alert("No data found for the selected criteria.");
+      return;
+    }
+
+    const headers = ['Date', 'Invoice Number', 'Type', 'Entity (Customer/Supplier)', 'GST Number', 'Description', `Grand Total (${company.currencySymbol || '$'})`];
+    const rows = filteredTransactions.map(t => [
+      formatDate(t.date),
+      t.invoiceNumber,
+      t.type,
+      t.entityName,
+      t.entityGstNumber || '',
+      t.items.map(i => `${i.productName} (x${i.quantity})`).join('; '),
+      t.totalAmount.toLocaleString()
+    ]);
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+    ].join('\n');
+
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    const typeLabel = transactionType === 'ALL' ? 'All' : transactionType;
+    link.setAttribute("href", url);
+    link.setAttribute("download", `Ledger_Report_${company.name.replace(/\s+/g, '_')}_${typeLabel}_${formatDate(startDate)}_to_${formatDate(endDate)}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const symbol = company.currencySymbol || '$';
+
+  return (
+    <div className="space-y-8 animate-in fade-in duration-700 pb-20">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 px-4 md:px-0">
+        <div>
+          <h2 className="text-3xl font-black text-slate-900 tracking-tight mb-1">Business Performance & Ledgers</h2>
+          <p className="text-sm text-slate-500 font-medium">Audit transaction history and export financial statements</p>
+        </div>
+        <div className="flex items-center space-x-3 print:hidden">
+
+          <button onClick={handleDownloadReport} className="bg-slate-900 text-white px-8 py-4 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-xl shadow-slate-200 hover:bg-black transition-all flex items-center active:scale-95">
+            <i className="fas fa-file-export mr-2 text-blue-400"></i> Export Statement
+          </button>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-3xl border border-slate-200/60 shadow-sm overflow-hidden no-print ring-4 ring-slate-100/50 transition-all duration-300">
+        <div className="p-5 md:p-6 space-y-6">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="bg-blue-50 text-blue-600 w-10 h-10 rounded-xl flex items-center justify-center">
+                <i className="fas fa-filter text-sm"></i>
+              </div>
+              <div>
+                <h4 className="text-sm font-black text-slate-800 uppercase tracking-tight">Audit Filters</h4>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Refine your financial audit data</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setIsFiltersVisible(!isFiltersVisible)}
+                className={`flex items-center gap-2 px-5 py-3.5 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all ${isFiltersVisible ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'}`}
+              >
+                <i className={`fas ${isFiltersVisible ? 'fa-chevron-up' : 'fa-sliders'} text-sm`}></i>
+                {isFiltersVisible ? 'Close Filters' : 'Configure Reports'}
+              </button>
+            </div>
+          </div>
+
+          {isFiltersVisible && (
+            <div className="pt-6 border-t border-slate-100 grid grid-cols-1 md:grid-cols-12 gap-6 animate-in slide-in-from-top-4 duration-300">
+              <div className="md:col-span-4">
+                <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-2.5 ml-1">Ledger Type</label>
+                <select
+                  value={transactionType}
+                  onChange={(e) => setTransactionType(e.target.value as 'ALL' | 'PURCHASE' | 'SALE')}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-none appearance-none cursor-pointer hover:bg-slate-100 transition-colors text-slate-800"
+                >
+                  <option value="ALL">📊 All Records</option>
+                  <option value="PURCHASE">📥 Purchase Ledger</option>
+                  <option value="SALE">📤 Sales Ledger</option>
+                </select>
+              </div>
+
+              <div className="md:col-span-6">
+                <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-2.5 ml-1">Date Period</label>
+                <div className="flex items-center gap-3">
+                  <div className="relative flex-1">
+                    <input
+                      type="date"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-none hover:bg-slate-100 transition-colors"
+                      value={startDate}
+                      onChange={e => setStartDate(e.target.value)}
+                    />
+                    <span className="absolute -top-2 left-3 bg-white px-1 text-[8px] font-black text-slate-400 uppercase">Start</span>
+                  </div>
+                  <div className="text-slate-300 font-bold">to</div>
+                  <div className="relative flex-1">
+                    <input
+                      type="date"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-none hover:bg-slate-100 transition-colors"
+                      value={endDate}
+                      onChange={e => setEndDate(e.target.value)}
+                    />
+                    <span className="absolute -top-2 left-3 bg-white px-1 text-[8px] font-black text-slate-400 uppercase">End</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-[11px] font-black text-slate-500 uppercase tracking-widest mb-2.5 ml-1">Entries</label>
+                <select
+                  value={itemsPerPage}
+                  onChange={(e) => {
+                    setItemsPerPage(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-none appearance-none cursor-pointer hover:bg-slate-100 transition-colors text-slate-800"
+                >
+                  <option value="10">10 Rows</option>
+                  <option value="20">20 Rows</option>
+                  <option value="50">50 Rows</option>
+                </select>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="px-8 py-6 border-b border-slate-50 flex justify-between items-center bg-slate-50/50">
+          <h4 className="text-sm font-bold text-slate-800 uppercase tracking-widest">Historical Transaction Audit ({formatDate(startDate)} to {formatDate(endDate)})</h4>
+          <div className="text-[10px] font-bold text-slate-400">Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, filteredTransactions.length)} of {filteredTransactions.length} entries</div>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left">
+            <thead>
+              <tr className="bg-white border-b border-slate-100">
+                <th className="px-8 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Date</th>
+                <th className="px-8 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Type</th>
+                <th className="px-8 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Entity (Customer/Supplier)</th>
+                <th className="px-8 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">GST Number</th>
+                <th className="px-8 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Description</th>
+                <th className="px-8 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-right">Grand Total</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-50">
+              {paginatedTransactions.length > 0 ? paginatedTransactions.map((t) => (
+                <tr key={t.id} className="hover:bg-slate-50 transition-colors">
+                  <td className="px-8 py-4 text-xs font-bold text-slate-800">{formatDate(t.date)}</td>
+                  <td className="px-8 py-4">
+                    <span className={`px-2 py-0.5 rounded-[4px] text-[10px] font-black uppercase ${t.type === 'SALE' ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'}`}>
+                      {t.type}
+                    </span>
+                  </td>
+                  <td className="px-8 py-4 text-xs font-bold text-slate-800">{t.entityName}</td>
+                  <td className="px-8 py-4 text-xs text-slate-600 font-mono">{t.entityGstNumber || '-'}</td>
+                  <td className="px-8 py-4">
+                    <div className="text-xs text-slate-600">
+                      {t.items[0]?.productName} {t.items.length > 1 && `(+${t.items.length - 1} more)`}
+                      <div className="text-[10px] text-slate-400 font-mono">{t.invoiceNumber}</div>
+                    </div>
+                  </td>
+                  <td className="px-8 py-4 text-right text-sm font-black text-slate-900">
+                    {symbol}{t.totalAmount.toLocaleString()}
+                  </td>
+                </tr>
+              )) : (
+                <tr>
+                  <td colSpan={6} className="px-8 py-20 text-center text-slate-400 italic">No transactions found for the selected period.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="flex flex-col sm:flex-row justify-between items-center gap-4 px-8 py-6 bg-slate-50/50 border-t border-slate-50">
+          <div className="flex items-center space-x-2">
+            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Items per page:</label>
+            <select
+              value={itemsPerPage}
+              onChange={(e) => {
+                setItemsPerPage(Number(e.target.value));
+                setCurrentPage(1);
+              }}
+              className="bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="5">5</option>
+              <option value="10">10</option>
+              <option value="20">20</option>
+              <option value="50">50</option>
+            </select>
+          </div>
+
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+              disabled={currentPage === 1}
+              className="px-4 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all uppercase tracking-widest"
+            >
+              Previous
+            </button>
+
+            <div className="flex space-x-1">
+              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                let pageNum = i + 1;
+                if (totalPages > 5 && currentPage > 3) {
+                  pageNum = currentPage - 3 + i + 1;
+                  if (pageNum > totalPages) pageNum = totalPages - (4 - i);
+                }
+                const isCurrent = pageNum === currentPage;
+                if (pageNum > 0 && pageNum <= totalPages) {
+                  return (
+                    <button
+                      key={pageNum}
+                      onClick={() => setCurrentPage(pageNum)}
+                      className={`w-8 h-8 rounded-lg text-[10px] font-black transition-all ${
+                        isCurrent
+                          ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
+                          : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+                      }`}
+                    >
+                      {pageNum}
+                    </button>
+                  );
+                }
+                return null;
+              })}
+            </div>
+
+            <button
+              onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+              disabled={currentPage === totalPages || totalPages === 0}
+              className="px-4 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all uppercase tracking-widest"
+            >
+              Next
+            </button>
+          </div>
+
+          <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+            Page {currentPage} of {Math.max(1, totalPages)}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default Analytics;

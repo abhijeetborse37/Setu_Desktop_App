@@ -1,0 +1,34 @@
+{
+  "name": "setu-erp-&-business-suite",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@fortawesome/fontawesome-free": "^7.2.0",
+    "@types/pdfmake": "^0.3.2",
+    "axios": "^1.13.5",
+    "exceljs": "^4.4.0",
+    "firebase": "^12.8.0",
+    "html2canvas": "^1.4.1",
+    "jspdf": "^4.2.1",
+    "jwt-decode": "^4.0.0",
+    "pdfmake": "^0.3.7",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "recharts": "2.15.0",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.2.1",
+    "@types/node": "^22.14.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "tailwindcss": "^4.2.1",
+    "typescript": "~5.8.2",
+    "vite": "^6.2.0"
+  }
+}
